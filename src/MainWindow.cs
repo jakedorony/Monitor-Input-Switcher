@@ -75,7 +75,7 @@ namespace MonitorSwitch
             Action refreshUi = delegate
             {
                 // live monitor status
-                List<int> inputs = Ddc.ReadInputs();
+                List<MonitorInput> inputs = Ddc.ReadInputs();
                 if (inputs.Count == 0)
                 {
                     statusLabel.Text = "No monitors responding.\r\n" +
@@ -85,8 +85,8 @@ namespace MonitorSwitch
                 {
                     var lines = new List<string>();
                     for (int i = 0; i < inputs.Count; i++)
-                        lines.Add("Monitor " + i + ":  " +
-                            (inputs[i] < 0 ? "couldn't read" : TrayApp.FriendlyInput(inputs[i])));
+                        lines.Add(TrayApp.MonitorLabel(inputs[i].Id, i) + ":  " +
+                            (inputs[i].Value < 0 ? "couldn't read" : TrayApp.FriendlyInput(inputs[i].Value)));
                     statusLabel.Text = string.Join("\r\n", lines);
                 }
                 // profile cards
@@ -197,16 +197,15 @@ namespace MonitorSwitch
                 if (signedIn)
                 {
                     lblSyncInfo.Text = "Signed in as " + SyncClient.Email +
-                        ". Profiles on this PC (" + TrayApp.MachineName +
-                        ") back up automatically.";
+                        ". Your profiles sync across all your computers automatically.";
                     lblSyncStatus.Text = TrayApp.LastSyncUtc == DateTime.MinValue
                         ? "Not synced yet."
                         : "Last synced: " + TrayApp.LastSyncUtc.ToLocalTime().ToString("g");
                 }
                 else
                 {
-                    lblSyncInfo.Text = "Sign in to back up this PC's profiles and " +
-                        "sync them across your computers.";
+                    lblSyncInfo.Text = "Sign in to share your two profiles across " +
+                        "all the computers plugged into these monitors.";
                 }
             };
 

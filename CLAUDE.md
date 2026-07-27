@@ -8,11 +8,12 @@ Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 2.0.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
-  (`MyAppVersion`). v2.0 = the .NET 8 port + sync. The single-file C#5
-  original lives in git history; a compiled v1.0 is installed on this dev
-  machine at `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (the v2
-  installer upgrades it in place via the shared AppId).
+- Version 2.1.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+  (`MyAppVersion`). v2.0 = the .NET 8 port + per-machine sync; v2.1 = shared
+  profiles matched by monitor hardware id. The single-file C#5 original
+  lives in git history; the user runs an installed copy at
+  `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (v2.0.0 as of 2026-07-27;
+  installers upgrade it in place via the shared AppId).
 - Builds clean with `dotnet build`.
 
 ## Build
@@ -59,41 +60,51 @@ CI: `.github/workflows/build.yml` publishes the exe as an artifact on push.
 - **Supabase project** `monitor-switch` (ref `cvnpmmmkzphhgmimfrpi`, org
   "Noodle House Incorporated") — `SupabaseUrl`/`ApiKey` constants in
   src/SyncClient.cs. The publishable key is safe to embed; **RLS is the
-  security boundary** — every policy on `public.profiles` requires
+  security boundary** — every policy on `public.shared_profiles` requires
   `user_id = auth.uid()`. Schema changes go through Supabase migrations AND
-  the wire DTOs in SyncClient.cs together.
+  the wire DTOs in SyncClient.cs together. (An empty superseded
+  `public.profiles` table from v2.0 still exists; safe to drop from the
+  dashboard.)
 
 ## Architecture (src/)
 
-- `Native.cs` — P/Invoke: dxva2 DDC/CI, user32, crypt32 DPAPI.
-- `Ddc.cs` — enumeration + VCP 0x60. `ApplyProfile` (write), `CaptureCurrent`
-  (all-or-null read, for saving), `ReadInputs` (-1 sentinel, live status),
-  `DetectInputs` (balloon string).
-- `Profile.cs` — Name + Values (index = monitor enumeration order) +
-  `UpdatedAtUtc` (MinValue = untouched built-in default, never pushed to
-  cloud). Empty Values = "not set"; see `TrayApp.IsSet`.
+- `Native.cs` — P/Invoke: dxva2 DDC/CI, user32 (incl. GetMonitorInfoW /
+  EnumDisplayDevicesW for monitor identity), crypt32 DPAPI.
+- `Ddc.cs` — enumeration + VCP 0x60. Each `PhysMon` gets an `Id` = PnP
+  hardware id (e.g. "DEL40A8"; duplicates get "#2", "#3"). `ApplyProfile`
+  matches saved inputs by id first, positional fallback for legacy null-id
+  entries. `CaptureCurrent` (all-or-null, keyed by id), `ReadInputs`,
+  `DetectInputs`, `UpgradeLegacyEntries` (fills ids into positional data).
+- `Profile.cs` — Name + `Inputs` (List<InputSetting>{MonitorId, Value};
+  MonitorId null = legacy positional) + `UpdatedAtUtc` (MinValue = untouched
+  built-in default, never pushed to cloud). Empty Inputs = "not set"; see
+  `TrayApp.IsSet`.
 - `ConfigStore.cs` — `%APPDATA%\MonitorSwitch\config.json`; auto-migrates
-  v1.x `config.txt` (empty value list stays valid = deleted slot, or deleted
-  profiles resurrect).
+  v1.x `config.txt` AND the v2.0 positional-`Values` JSON (empty entry list
+  stays valid = deleted slot, or deleted profiles resurrect).
 - `AuthStore.cs` — email + refresh token in `auth.dat`, DPAPI-encrypted
   (CurrentUser).
 - `SyncClient.cs` — raw Supabase REST (GoTrue password/refresh grants,
   PostgREST upsert with `Prefer: resolution=merge-duplicates`). Throws
   `SyncException` with user-showable messages.
 - `TrayApp.cs` — tray menu, profile actions, startup checkbox plumbing, and
-  sync orchestration: per-slot last-write-wins with 1s slack
-  (`MergeSlot`), push-after-save fire-and-forget, silent restore+sync at
-  startup. `MachineName` honors the `MONITORSWITCH_MACHINE` env var (test
-  hook for simulating a second machine).
+  sync orchestration: per-slot last-write-wins with 1s slack (`MergeSlot`),
+  push-after-save fire-and-forget, silent restore+sync at startup, legacy
+  positional→id upgrade on launch.
 - `MainWindow.cs` — modeless singleton window incl. the Sync group box.
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init).
 
 ## Sync model (decided, don't redesign casually)
 
-Rows in `public.profiles` are keyed `(user_id, machine_name, slot)` — each
-machine syncs only its own two slots. The cloud is per-machine backup +
-remote edit, NOT a shared profile set: profiles reference monitors by
-enumeration index, so they're meaningless on other hardware.
+Rows in `public.shared_profiles` are keyed `(user_id, slot)` — the two
+profiles are SHARED across every signed-in PC. Rationale: the same physical
+monitors are plugged into all the user's PCs; Profile A/B mean "send the
+monitors to PC A / PC B", so every machine needs both. Inputs are stored per
+monitor hardware id (`inputs` jsonb: `[{"monitor":"DEL40A8","value":15}]`),
+not per enumeration position, so PCs that enumerate the monitors in
+different orders still apply them correctly. Identical monitor models get
+"#2"-style suffixes in enumeration order — a swap between two identical
+models across PCs is the one remaining (accepted) ambiguity.
 
 ## Behavioral decisions already made (don't regress)
 
@@ -105,8 +116,8 @@ enumeration index, so they're meaningless on other hardware.
 - Friendly input names via `FriendlyInput` (MCCS: 1/2 VGA, 3/4 DVI, 15/16 DP,
   17/18 HDMI; fallback "Input N").
 - Uninstall leaves `%APPDATA%\MonitorSwitch` in place (user data).
-- Monitor identity is enumeration order — known limitation, documented in
-  SETUP.md; don't "fix" silently.
+- Monitor identity is the PnP hardware id since v2.1; enumeration position
+  is only a fallback for un-upgraded legacy data.
 - Supabase email confirmation is ON (project default): Create account →
   confirmation email → Sign in. The app's copy accounts for this.
 
@@ -114,8 +125,9 @@ enumeration index, so they're meaningless on other hardware.
 
 - DDC/CI needs real monitors; no mock layer. Smoke-test: build, run, tray
   icon appears, window opens, Detect reads plausible values.
-- Sync: rows are visible via Supabase SQL; use `MONITORSWITCH_MACHINE` to
-  fake a second machine. Timestamps within 1s count as in-sync by design.
+- Sync: rows are visible via Supabase SQL; simulate "another PC edited a
+  profile" by updating a row's name/inputs + `updated_at = now()` in SQL and
+  re-syncing. Timestamps within 1s count as in-sync by design.
 - Balloon tips may be suppressed by Focus Assist — not a bug.
 - Some monitors report different read vs write values for VCP 0x60 (spec
   allows it) — capture/switch mismatches on exotic hardware are known.

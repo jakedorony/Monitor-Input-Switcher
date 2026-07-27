@@ -26,17 +26,6 @@ namespace MonitorSwitch
         public static event Action SyncStateChanged;
         public static DateTime LastSyncUtc = DateTime.MinValue;
 
-        // Cloud rows are keyed per machine. The env var is a test hook to
-        // simulate another machine without a second PC.
-        public static string MachineName
-        {
-            get
-            {
-                string overrideName = Environment.GetEnvironmentVariable("MONITORSWITCH_MACHINE");
-                return string.IsNullOrEmpty(overrideName) ? Environment.MachineName : overrideName;
-            }
-        }
-
         public static void Run()
         {
             Application.EnableVisualStyles();
@@ -47,6 +36,13 @@ namespace MonitorSwitch
             var a = ProfileA; var b = ProfileB;
             ConfigStore.Load(ref a, ref b);
             ProfileA = a; ProfileB = b;
+
+            // Upgrade legacy positional entries (v1.x/v2.0 data) to monitor
+            // identities using whatever is plugged in right now. Harmless to
+            // retry every launch until it succeeds.
+            bool upgraded = Ddc.UpgradeLegacyEntries(ProfileA);
+            upgraded |= Ddc.UpgradeLegacyEntries(ProfileB);
+            if (upgraded) ConfigStore.Save(ProfileA, ProfileB);
 
             Tray = new NotifyIcon();
             Tray.Icon = BuildIcon();
@@ -128,7 +124,7 @@ namespace MonitorSwitch
         // A profile with no captured values is "not set" (fresh or deleted).
         public static bool IsSet(Profile p)
         {
-            return p != null && p.Values != null && p.Values.Count > 0;
+            return p != null && p.Inputs != null && p.Inputs.Count > 0;
         }
 
         // Toggle between A and B. If the natural target is empty but the other
@@ -165,9 +161,17 @@ namespace MonitorSwitch
         {
             if (!IsSet(p)) return "Nothing saved yet.";
             var lines = new List<string>();
-            for (int i = 0; i < p.Values.Count; i++)
-                lines.Add("Monitor " + i + ":  " + FriendlyInput((int)p.Values[i]));
+            for (int i = 0; i < p.Inputs.Count; i++)
+                lines.Add(MonitorLabel(p.Inputs[i].MonitorId, i) + ":  " +
+                    FriendlyInput((int)p.Inputs[i].Value));
             return string.Join("\r\n", lines);
+        }
+
+        public static string MonitorLabel(string monitorId, int position)
+        {
+            return string.IsNullOrEmpty(monitorId)
+                ? "Monitor " + position
+                : "Monitor " + position + " (" + monitorId + ")";
         }
 
         // ----- "Start when I sign in" (HKCU Run) -----------------------------
@@ -257,7 +261,7 @@ namespace MonitorSwitch
             if (name.Length == 0) name = "Profile " + slot;
 
             var prof = new Profile(name);
-            prof.Values = vals;
+            prof.Inputs = vals;
             prof.UpdatedAtUtc = DateTime.UtcNow;
             if (slot == 'A') { ProfileA = prof; itemA.Text = prof.Name; }
             else             { ProfileB = prof; itemB.Text = prof.Name; }
@@ -313,11 +317,11 @@ namespace MonitorSwitch
             PushAfterLocalChange();
         }
 
-        public static string DescribeValues(List<uint> vals)
+        public static string DescribeValues(List<InputSetting> vals)
         {
             var parts = new List<string>();
             for (int i = 0; i < vals.Count; i++)
-                parts.Add("Mon " + i + " = " + FriendlyInput((int)vals[i]));
+                parts.Add("Mon " + i + " = " + FriendlyInput((int)vals[i].Value));
             return string.Join(", ", parts);
         }
 
@@ -360,7 +364,7 @@ namespace MonitorSwitch
             if (!SyncClient.IsSignedIn) return;
             try
             {
-                await SyncClient.UpsertAsync(MachineName, LocalRows());
+                await SyncClient.UpsertAsync(LocalRows());
                 LastSyncUtc = DateTime.UtcNow;
                 RaiseSyncStateChanged();
             }
@@ -372,11 +376,11 @@ namespace MonitorSwitch
             }
         }
 
-        // Two-way sync: pull this machine's rows, adopt anything newer than
-        // local, push anything local that's newer than the cloud.
+        // Two-way sync: pull the account's shared profiles, adopt anything
+        // newer than local, push anything local that's newer than the cloud.
         public static async Task SyncNowAsync()
         {
-            List<ProfileRow> remote = await SyncClient.FetchAsync(MachineName);
+            List<ProfileRow> remote = await SyncClient.FetchAsync();
 
             bool adopted = false;
             var toPush = new List<ProfileRow>();
@@ -387,7 +391,7 @@ namespace MonitorSwitch
             ProfileA = a; ProfileB = b;
 
             if (toPush.Count > 0)
-                await SyncClient.UpsertAsync(MachineName, toPush);
+                await SyncClient.UpsertAsync(toPush);
 
             if (adopted)
             {
@@ -410,7 +414,7 @@ namespace MonitorSwitch
             if (r != null && r.UpdatedAtUtc > local.UpdatedAtUtc + SyncSlack)
             {
                 var p = new Profile(r.Name);
-                p.Values = new List<uint>(r.Values);
+                p.Inputs = new List<InputSetting>(r.Inputs);
                 p.UpdatedAtUtc = r.UpdatedAtUtc;
                 local = p;
                 return true;
@@ -424,7 +428,7 @@ namespace MonitorSwitch
                 {
                     Slot = slot,
                     Name = local.Name,
-                    Values = local.Values,
+                    Inputs = local.Inputs,
                     UpdatedAtUtc = local.UpdatedAtUtc
                 });
             }
@@ -472,7 +476,7 @@ namespace MonitorSwitch
             {
                 Slot = slot,
                 Name = p.Name,
-                Values = p.Values,
+                Inputs = p.Inputs,
                 UpdatedAtUtc = p.UpdatedAtUtc
             });
         }

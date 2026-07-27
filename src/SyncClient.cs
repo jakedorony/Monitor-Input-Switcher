@@ -3,10 +3,13 @@
 //
 // Coupling: SupabaseUrl/ApiKey belong to the "monitor-switch" Supabase
 // project (ref cvnpmmmkzphhgmimfrpi). The table schema lives in that
-// project's migrations: public.profiles
-//   (user_id, machine_name, slot 'A'|'B', name, input_values int[], updated_at)
-// with RLS restricting every operation to user_id = auth.uid().
-// The publishable API key is safe to embed; RLS is the security boundary.
+// project's migrations: public.shared_profiles
+//   (user_id, slot 'A'|'B', name, inputs jsonb, updated_at)
+// where inputs = [{"monitor":"DEL40A8","value":15}, ...] (monitor null =
+// legacy positional entry). Profiles are shared account-wide: the same
+// physical monitors are plugged into every PC, so one saved profile is
+// meaningful everywhere. RLS restricts every operation to
+// user_id = auth.uid(); the publishable API key is safe to embed.
 
 using System;
 using System.Collections.Generic;
@@ -28,7 +31,7 @@ namespace MonitorSwitch
     {
         public string Slot;              // "A" or "B"
         public string Name;
-        public List<uint> Values;
+        public List<InputSetting> Inputs;
         public DateTime UpdatedAtUtc;
     }
 
@@ -77,12 +80,17 @@ namespace MonitorSwitch
             [JsonPropertyName("error_code")] public string ErrorCode { get; set; }
         }
 
+        class WireInputDto
+        {
+            [JsonPropertyName("monitor")] public string Monitor { get; set; }
+            [JsonPropertyName("value")] public uint Value { get; set; }
+        }
+
         class RowDto
         {
-            [JsonPropertyName("machine_name")] public string MachineName { get; set; }
             [JsonPropertyName("slot")] public string Slot { get; set; }
             [JsonPropertyName("name")] public string Name { get; set; }
-            [JsonPropertyName("input_values")] public List<uint> InputValues { get; set; }
+            [JsonPropertyName("inputs")] public List<WireInputDto> Inputs { get; set; }
             [JsonPropertyName("updated_at")] public DateTimeOffset UpdatedAt { get; set; }
         }
 
@@ -177,12 +185,11 @@ namespace MonitorSwitch
 
         // ----- data -----------------------------------------------------------
 
-        public static async Task<List<ProfileRow>> FetchAsync(string machineName)
+        public static async Task<List<ProfileRow>> FetchAsync()
         {
             string token = await EnsureAccessTokenAsync();
-            string url = SupabaseUrl + "/rest/v1/profiles"
-                + "?select=slot,name,input_values,updated_at"
-                + "&machine_name=eq." + Uri.EscapeDataString(machineName);
+            string url = SupabaseUrl + "/rest/v1/shared_profiles"
+                + "?select=slot,name,inputs,updated_at";
 
             using (var req = new HttpRequestMessage(HttpMethod.Get, url))
             {
@@ -192,11 +199,15 @@ namespace MonitorSwitch
                 var result = new List<ProfileRow>();
                 foreach (var r in rows)
                 {
+                    var inputs = new List<InputSetting>();
+                    if (r.Inputs != null)
+                        foreach (var e in r.Inputs)
+                            inputs.Add(new InputSetting(e.Monitor, e.Value));
                     result.Add(new ProfileRow
                     {
                         Slot = r.Slot,
                         Name = r.Name,
-                        Values = r.InputValues ?? new List<uint>(),
+                        Inputs = inputs,
                         UpdatedAtUtc = r.UpdatedAt.UtcDateTime
                     });
                 }
@@ -204,7 +215,7 @@ namespace MonitorSwitch
             }
         }
 
-        public static async Task UpsertAsync(string machineName, List<ProfileRow> rows)
+        public static async Task UpsertAsync(List<ProfileRow> rows)
         {
             if (rows.Count == 0) return;
             string token = await EnsureAccessTokenAsync();
@@ -212,17 +223,19 @@ namespace MonitorSwitch
             var dtos = new List<RowDto>();
             foreach (var r in rows)
             {
+                var inputs = new List<WireInputDto>();
+                foreach (var e in r.Inputs)
+                    inputs.Add(new WireInputDto { Monitor = e.MonitorId, Value = e.Value });
                 dtos.Add(new RowDto
                 {
-                    MachineName = machineName,
                     Slot = r.Slot,
                     Name = r.Name,
-                    InputValues = r.Values,
+                    Inputs = inputs,
                     UpdatedAt = new DateTimeOffset(r.UpdatedAtUtc, TimeSpan.Zero)
                 });
             }
 
-            using (var req = new HttpRequestMessage(HttpMethod.Post, SupabaseUrl + "/rest/v1/profiles"))
+            using (var req = new HttpRequestMessage(HttpMethod.Post, SupabaseUrl + "/rest/v1/shared_profiles"))
             {
                 req.Headers.Add("Authorization", "Bearer " + token);
                 req.Headers.Add("Prefer", "resolution=merge-duplicates,return=minimal");

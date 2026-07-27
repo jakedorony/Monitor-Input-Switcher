@@ -58,14 +58,14 @@ namespace MonitorSwitch
 "Open the main window and look at \"Sync across computers\".\r\n" +
 "Create an account once (email + password, then click the\r\n" +
 "confirmation link we email you). Sign in with the same account\r\n" +
-"on each computer where you use this app.\r\n" +
+"on each computer plugged into these monitors.\r\n" +
 "\r\n" +
-"Each computer keeps its own Profile A and B (monitors differ\r\n" +
-"per machine), and they're backed up to your account\r\n" +
-"automatically whenever you save. If you reinstall Windows or\r\n" +
-"get a new PC with the same monitors, just sign in and your\r\n" +
-"profiles come back. Everything still works fine without an\r\n" +
-"account - syncing is optional.\r\n" +
+"Your two profiles are SHARED: save them once on any computer\r\n" +
+"and every signed-in computer gets them. That's the point -\r\n" +
+"each computer can send the monitors to the other one, and the\r\n" +
+"app remembers which monitor gets which input even if your\r\n" +
+"computers list the monitors in a different order. Everything\r\n" +
+"still works fine without an account - syncing is optional.\r\n" +
 "\r\n" +
 "-----------------------------------------------------------\r\n" +
 "IF SOMETHING DOESN'T WORK\r\n" +

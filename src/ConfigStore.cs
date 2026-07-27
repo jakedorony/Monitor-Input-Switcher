@@ -1,9 +1,13 @@
 // ConfigStore.cs - local settings persistence.
 //
-// v2.x stores JSON at %APPDATA%\MonitorSwitch\config.json.
-// v1.x stored     %APPDATA%\MonitorSwitch\config.txt  (ProfileA = Name | v0, v1)
-// On first run of v2, an existing config.txt is migrated automatically.
-// An empty value list is valid and means "unset" (deleted slot) - keep
+// v2.1 stores JSON at %APPDATA%\MonitorSwitch\config.json with inputs keyed
+// by monitor hardware id:  "Inputs": [{"Monitor":"DEL40A8","Value":15}, ...]
+// Older formats are migrated automatically on load:
+//   v2.0 config.json used positional arrays:  "Values": [15, 15]
+//   v1.x config.txt used:                     ProfileA = Name | 15, 15
+// Positional data becomes entries with a null Monitor id; ids are filled in
+// at startup once monitors can be enumerated (Ddc.UpgradeLegacyEntries).
+// An empty entry list is valid and means "unset" (deleted slot) - keep
 // accepting it or deleted profiles resurrect.
 
 using System;
@@ -15,10 +19,17 @@ namespace MonitorSwitch
 {
     static class ConfigStore
     {
+        class InputDto
+        {
+            public string Monitor { get; set; }
+            public uint Value { get; set; }
+        }
+
         class ProfileDto
         {
             public string Name { get; set; }
-            public List<uint> Values { get; set; }
+            public List<InputDto> Inputs { get; set; }
+            public List<uint> Values { get; set; }      // legacy v2.0 positional
             public DateTime UpdatedAtUtc { get; set; }
         }
 
@@ -89,7 +100,11 @@ namespace MonitorSwitch
                     ProfileA = ToDto(profileA),
                     ProfileB = ToDto(profileB)
                 };
-                var opts = new JsonSerializerOptions { WriteIndented = true };
+                var opts = new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                };
                 File.WriteAllText(JsonPath, JsonSerializer.Serialize(dto, opts));
                 return true;
             }
@@ -101,10 +116,13 @@ namespace MonitorSwitch
 
         static ProfileDto ToDto(Profile p)
         {
+            var inputs = new List<InputDto>();
+            foreach (var e in p.Inputs)
+                inputs.Add(new InputDto { Monitor = e.MonitorId, Value = e.Value });
             return new ProfileDto
             {
                 Name = p.Name,
-                Values = new List<uint>(p.Values),
+                Inputs = inputs,
                 UpdatedAtUtc = p.UpdatedAtUtc
             };
         }
@@ -113,7 +131,17 @@ namespace MonitorSwitch
         {
             if (d == null || string.IsNullOrEmpty(d.Name)) return null;
             var p = new Profile(d.Name);
-            p.Values = d.Values ?? new List<uint>();
+            if (d.Inputs != null)
+            {
+                foreach (var e in d.Inputs)
+                    p.Inputs.Add(new InputSetting(e.Monitor, e.Value));
+            }
+            else if (d.Values != null)
+            {
+                // v2.0 positional format
+                foreach (uint v in d.Values)
+                    p.Inputs.Add(new InputSetting(null, v));
+            }
             p.UpdatedAtUtc = DateTime.SpecifyKind(d.UpdatedAtUtc, DateTimeKind.Utc);
             return p;
         }
@@ -138,21 +166,21 @@ namespace MonitorSwitch
                 string name = rest.Substring(0, pipe).Trim();
                 string valuesText = rest.Substring(pipe + 1).Trim();
 
-                var vals = new List<uint>();
+                var vals = new List<InputSetting>();
                 bool valid = name.Length > 0;
                 if (valuesText.Length > 0)
                 {
                     foreach (string part in valuesText.Split(','))
                     {
                         uint v;
-                        if (uint.TryParse(part.Trim(), out v)) vals.Add(v);
+                        if (uint.TryParse(part.Trim(), out v)) vals.Add(new InputSetting(null, v));
                         else { valid = false; break; }
                     }
                 }
                 if (!valid) continue;
 
                 var prof = new Profile(name);
-                prof.Values = vals;
+                prof.Inputs = vals;
                 prof.UpdatedAtUtc = stampUtc;
                 if (key == "profilea") profileA = prof;
                 else if (key == "profileb") profileB = prof;

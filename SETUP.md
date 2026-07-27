@@ -94,10 +94,12 @@ computers"**:
    **Sign in** in the app.
 3. Sign in with the same account on your other computers.
 
-Each computer keeps its own Profile A and B (your monitors differ per
-machine), and they back up automatically whenever you save. After a reinstall
-or on a new PC with the same monitors, signing in brings your profiles back.
-Everything works fine without an account — syncing is optional.
+Your two profiles are **shared**: save them once on any computer and every
+signed-in computer gets them automatically. That's the whole idea — each
+computer can send the monitors over to the other one, and the app remembers
+which physical monitor gets which input (it identifies monitors by their
+hardware ID, so it doesn't matter if your computers list them in a different
+order). Everything works fine without an account — syncing is optional.
 
 ---
 
@@ -138,9 +140,10 @@ If you have two PCs, install it on both.
   the same folder as `auth.dat`, encrypted so only your Windows account can
   read it. The folder is intentionally left in place if you uninstall —
   delete it by hand if you want a fully clean removal.
-- Profiles remember monitors by their **position in Windows' monitor list**.
-  If you change graphics drivers or plug monitors into different ports, the
-  order can shift — just re-save your profiles if that happens.
+- Profiles remember monitors by their **hardware ID**, so driver updates or
+  re-ordered monitor lists don't break them. The one exception: two monitors
+  of the *identical model* can't be told apart perfectly across different
+  PCs — if inputs ever land on the wrong twin, just re-save the profile.
 - To make the app stop starting at sign-in without uninstalling: re-run the
   installer and untick the startup option, or remove the "MonitorSwitch" entry
   under Task Manager → Startup apps.
