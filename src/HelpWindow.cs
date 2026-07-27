@@ -1,0 +1,127 @@
+// HelpWindow.cs - built-in end-user guide, shown from the menu and on first run.
+
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace MonitorSwitch
+{
+    static class HelpWindow
+    {
+        public static void ShowHelp()
+        {
+            string guide =
+"MONITOR INPUT SWITCHER - QUICK GUIDE\r\n" +
+"\r\n" +
+"This app switches your monitors between two inputs. It lives in\r\n" +
+"the tray (bottom-right of the screen, near the clock).\r\n" +
+"\r\n" +
+"  - DOUBLE-CLICK the tray icon to open the main window, which\r\n" +
+"    shows what each monitor is on right now and lets you manage\r\n" +
+"    everything with buttons.\r\n" +
+"  - RIGHT-CLICK the tray icon for the quick menu.\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
+"FIRST: SAVE YOUR TWO SETUPS\r\n" +
+"-----------------------------------------------------------\r\n" +
+"You only do this once. It teaches the app your two layouts.\r\n" +
+"\r\n" +
+"  1. Set both monitors to the inputs you want for your first\r\n" +
+"     setup (use the monitors' own buttons if needed).\r\n" +
+"  2. Right-click the tray icon and choose\r\n" +
+"     \"Save current setup as Profile A...\".\r\n" +
+"  3. Type a name you'll recognise (e.g. Work PC) and click Save.\r\n" +
+"  4. Switch both monitors to your second setup.\r\n" +
+"  5. Right-click again, choose \"Save current setup as\r\n" +
+"     Profile B...\", name it (e.g. Personal PC), and click Save.\r\n" +
+"\r\n" +
+"Your two named buttons are now ready and are remembered even\r\n" +
+"after you restart the computer.\r\n" +
+"\r\n" +
+"To redo a setup, just save over it again. To clear one out\r\n" +
+"entirely, right-click the icon and choose \"Delete Profile...\".\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
+"EVERY DAY: SWITCHING\r\n" +
+"-----------------------------------------------------------\r\n" +
+"  - Right-click the tray icon, then click either named button.\r\n" +
+"  - Or use \"Switch (toggle A/B)\" in the menu or main window\r\n" +
+"    to flip between the two.\r\n" +
+"  - A small popup confirms each switch.\r\n" +
+"\r\n" +
+"Can't see the icon? Click the small ^ arrow near the clock -\r\n" +
+"Windows hides new icons there. Drag it onto the taskbar to\r\n" +
+"keep it visible.\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
+"OPTIONAL: SYNC ACROSS COMPUTERS\r\n" +
+"-----------------------------------------------------------\r\n" +
+"Open the main window and look at \"Sync across computers\".\r\n" +
+"Create an account once (email + password, then click the\r\n" +
+"confirmation link we email you). Sign in with the same account\r\n" +
+"on each computer where you use this app.\r\n" +
+"\r\n" +
+"Each computer keeps its own Profile A and B (monitors differ\r\n" +
+"per machine), and they're backed up to your account\r\n" +
+"automatically whenever you save. If you reinstall Windows or\r\n" +
+"get a new PC with the same monitors, just sign in and your\r\n" +
+"profiles come back. Everything still works fine without an\r\n" +
+"account - syncing is optional.\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
+"IF SOMETHING DOESN'T WORK\r\n" +
+"-----------------------------------------------------------\r\n" +
+"  - A monitor switches to the wrong input, or a popup says it\r\n" +
+"    \"failed\": that monitor's DDC/CI setting is probably off.\r\n" +
+"    Open the monitor's menu with its physical buttons, find\r\n" +
+"    DDC/CI (often under \"Other\" or \"System\"), turn it On, then\r\n" +
+"    save the profile again.\r\n" +
+"\r\n" +
+"  - You switched a monitor away to your other computer and\r\n" +
+"    can't switch it back here: that's expected. This app only\r\n" +
+"    controls monitors while they're showing THIS computer.\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
+"TIP: To have the app start automatically when you turn on the\r\n" +
+"computer, tick \"Start automatically when I sign in\" in the\r\n" +
+"main window.\r\n";
+
+            var form = new Form();
+            form.Text = "How to use - Monitor Input Switcher";
+            form.StartPosition = FormStartPosition.CenterScreen;
+            form.ClientSize = new Size(520, 460);
+            form.MinimumSize = new Size(420, 320);
+            form.TopMost = true;
+
+            var box = new TextBox();
+            box.Multiline = true;
+            box.ReadOnly = true;
+            box.ScrollBars = ScrollBars.Vertical;
+            box.WordWrap = true;
+            box.Dock = DockStyle.Fill;
+            box.Font = new Font("Consolas", 9.5f);
+            box.BackColor = Color.White;
+            box.Text = guide;
+            box.Select(0, 0);
+
+            var panel = new Panel();
+            panel.Dock = DockStyle.Bottom;
+            panel.Height = 44;
+
+            form.Controls.Add(box);
+            form.Controls.Add(panel);   // panel now has its real width
+
+            var ok = new Button();
+            ok.Text = "Got it";
+            ok.DialogResult = DialogResult.OK;
+            ok.Size = new Size(90, 28);
+            ok.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+            ok.Location = new Point(panel.ClientSize.Width - 102, 8);
+            panel.Controls.Add(ok);
+
+            form.AcceptButton = ok;
+
+            form.ShowDialog();
+            form.Dispose();
+        }
+    }
+}

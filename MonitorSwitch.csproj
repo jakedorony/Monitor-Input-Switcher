@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>MonitorSwitch</RootNamespace>
+    <AssemblyName>MonitorSwitch</AssemblyName>
+    <ApplicationIcon>MonitorSwitch.ico</ApplicationIcon>
+
+    <!-- Version: bump here AND in MonitorSwitch.iss (MyAppVersion). -->
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+
+    <AssemblyTitle>Monitor Input Switcher</AssemblyTitle>
+    <Product>Monitor Input Switcher</Product>
+    <Description>Switches monitor inputs from the system tray via DDC/CI.</Description>
+    <Company>Monitor Input Switcher</Company>
+    <Copyright>Copyright © 2026</Copyright>
+
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Publishing: self-contained single exe, no runtime prerequisite. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <PublishSingleFile Condition="'$(PublishSingleFile)' == ''">false</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+</Project>

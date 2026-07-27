@@ -1,0 +1,35 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (self-contained single file)
+        run: dotnet publish MonitorSwitch.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+
+      - name: Compile installer
+        run: iscc MonitorSwitch.iss
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonitorSwitch
+          path: publish/MonitorSwitch.exe
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonitorSwitch-Setup
+          path: Output/MonitorSwitch-Setup-*.exe

@@ -1,7 +1,9 @@
 # Monitor Input Switcher — Setup Guide
 
 A tiny app that lives in your system tray (bottom-right corner, by the clock)
-and switches your monitors between two inputs with one click.
+and switches your monitors between two inputs with one click. Optionally, your
+saved profiles back up to a free online account so they follow you across
+computers and reinstalls.
 
 This guide has two parts: building the installer (one-time, technical) and
 installing/using the app (anyone).
@@ -15,15 +17,12 @@ need any of these tools.
 
 ### 1a. Build the program
 
-1. Put these files in one folder (somewhere you own — Desktop, Documents.
-   **Not** `C:\Program Files`):
-   - `MonitorSwitch.cs`
-   - `MonitorSwitch.ico`
-   - `build.bat`
-2. Double-click **`build.bat`**. It uses the C# compiler already built into
-   Windows — no Visual Studio or downloads needed, no admin rights.
-3. It should say **"Build succeeded: MonitorSwitch.exe"**. You now have
-   `MonitorSwitch.exe` (with the app icon embedded).
+1. Install the **.NET 8 SDK** (free, no admin needed with the per-user
+   installer): https://dot.net — or `winget install Microsoft.DotNet.SDK.8`.
+2. In the project folder, double-click **`build.bat`** (or run
+   `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish`).
+3. It should say **"Build succeeded: publish\MonitorSwitch.exe"**. That exe is
+   self-contained — target PCs don't need .NET installed.
 
 ### 1b. Build the installer
 
@@ -32,14 +31,14 @@ need any of these tools.
    (Or from a command prompt:
    `"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" MonitorSwitch.iss`)
 3. The finished installer appears in a new **`Output`** folder as
-   **`MonitorSwitch-Setup-1.0.0.exe`**. That single file is everything the end
+   **`MonitorSwitch-Setup-2.0.0.exe`**. That single file is everything the end
    user needs.
 
 ---
 
 ## Part 2 — Install the app (for anyone, non-technical)
 
-1. Double-click **`MonitorSwitch-Setup-1.0.0.exe`**.
+1. Double-click **`MonitorSwitch-Setup-2.0.0.exe`**.
 
    > **"Windows protected your PC"?** Windows shows this for any new program it
    > hasn't seen before. Click **More info**, then **Run anyway**. (This goes
@@ -79,9 +78,26 @@ Your two named buttons are now ready and are remembered across restarts.
 
 ### Day to day
 
-- **Right-click** the tray icon → click either named button to switch.
-- **Double-click** the tray icon → toggles between your two setups.
+- **Right-click** the tray icon → click either named button to switch, or use
+  **"Switch (toggle A/B)"** to flip between the two.
+- **Double-click** the tray icon → opens the main window (live status, all the
+  buttons, and the sync section).
 - A small popup confirms each switch.
+
+### Optional: sync across computers
+
+Open the main window (double-click the tray icon) and find **"Sync across
+computers"**:
+
+1. Type an email and password and click **Create account** (one time only).
+2. Click the confirmation link in the email you receive, then press
+   **Sign in** in the app.
+3. Sign in with the same account on your other computers.
+
+Each computer keeps its own Profile A and B (your monitors differ per
+machine), and they back up automatically whenever you save. After a reinstall
+or on a new PC with the same monitors, signing in brings your profiles back.
+Everything works fine without an account — syncing is optional.
 
 ---
 
@@ -91,7 +107,7 @@ Your two named buttons are now ready and are remembered across restarts.
   SmartScreen warning. For wider distribution, sign both with an Authenticode
   certificate to remove it. Overkill for home use.
 - **Versioning.** To release an update, bump the version in two places —
-  `AssemblyVersion`/`AssemblyFileVersion` in `MonitorSwitch.cs` and
+  `Version`/`AssemblyVersion`/`FileVersion` in `MonitorSwitch.csproj` and
   `MyAppVersion` in `MonitorSwitch.iss` — then rebuild both. Installing over an
   existing copy upgrades it in place.
 
@@ -117,9 +133,14 @@ If you have two PCs, install it on both.
 
 - **No admin rights** are needed to install, run, or use the app.
 - Your two setups are saved per-user at
-  **`%APPDATA%\MonitorSwitch\config.txt`**. The app manages this file; you can
-  leave it alone. It is intentionally left in place if you uninstall — delete
-  that folder by hand if you want a fully clean removal.
+  **`%APPDATA%\MonitorSwitch\config.json`** (upgrading from v1.x migrates the
+  old `config.txt` automatically). If you use sync, your sign-in is kept in
+  the same folder as `auth.dat`, encrypted so only your Windows account can
+  read it. The folder is intentionally left in place if you uninstall —
+  delete it by hand if you want a fully clean removal.
+- Profiles remember monitors by their **position in Windows' monitor list**.
+  If you change graphics drivers or plug monitors into different ports, the
+  order can shift — just re-save your profiles if that happens.
 - To make the app stop starting at sign-in without uninstalling: re-run the
   installer and untick the startup option, or remove the "MonitorSwitch" entry
   under Task Manager → Startup apps.

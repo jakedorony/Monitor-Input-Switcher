@@ -1,27 +1,28 @@
 @echo off
-REM Builds MonitorSwitch.exe using the C# compiler that ships with Windows.
-REM No Visual Studio or SDK install required. Run from the folder containing
-REM MonitorSwitch.cs (double-clicking this file works).
+REM Builds a self-contained single-file MonitorSwitch.exe (no .NET runtime
+REM needed on the target PC). Requires the .NET 8 SDK - either on PATH or
+REM installed per-user at %LOCALAPPDATA%\Microsoft\dotnet.
+REM Output: publish\MonitorSwitch.exe
 
-set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
-if not exist "%CSC%" set CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe
+set DOTNET=dotnet
+where dotnet >nul 2>nul
+if errorlevel 1 set DOTNET=%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe
 
-if not exist "%CSC%" (
-    echo Could not find csc.exe - .NET Framework 4.x is required.
-    pause
-    exit /b 1
+if not exist "%DOTNET%" (
+    where dotnet >nul 2>nul
+    if errorlevel 1 (
+        echo Could not find the .NET SDK. Install it from https://dot.net
+        pause
+        exit /b 1
+    )
 )
 
-set ICON=
-if exist "MonitorSwitch.ico" set ICON=/win32icon:MonitorSwitch.ico
-
-"%CSC%" /nologo /target:winexe /out:MonitorSwitch.exe %ICON% ^
-    /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
-    MonitorSwitch.cs
+"%DOTNET%" publish MonitorSwitch.csproj -c Release -r win-x64 --self-contained ^
+    -p:PublishSingleFile=true -o publish
 
 if %ERRORLEVEL% EQU 0 (
     echo.
-    echo Build succeeded: MonitorSwitch.exe
+    echo Build succeeded: publish\MonitorSwitch.exe
 ) else (
     echo.
     echo Build FAILED - see errors above.

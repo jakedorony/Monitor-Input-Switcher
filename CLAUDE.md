@@ -1,104 +1,121 @@
 # Monitor Input Switcher
 
 Windows system-tray app that switches monitor inputs via DDC/CI (VCP code
-0x60). Single C# source file, WinForms, .NET Framework 4.x, compiled with the
-in-box `csc.exe` — deliberately zero external dependencies. Distributed via an
+0x60), with optional cross-machine profile sync backed by Supabase. C# /
+WinForms on .NET 8 (`net8.0-windows`), BCL only — deliberately zero NuGet
+package references. Distributed as a self-contained single-file exe via an
 Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 1.1.0 in both `MonitorSwitch.cs` (assembly attrs) and
-  `MonitorSwitch.iss` (`MyAppVersion`).
-- **The code has NEVER been compiled.** It was written in an environment with
-  no C# compiler. Structural checks (brace balance, C# 5 syntax scan) passed,
-  but expect first-build errors. Priority task: build it, fix what falls out.
-- The Inno script has likewise never been compiled.
+- Version 2.0.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+  (`MyAppVersion`). v2.0 = the .NET 8 port + sync. The single-file C#5
+  original lives in git history; a compiled v1.0 is installed on this dev
+  machine at `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (the v2
+  installer upgrades it in place via the shared AppId).
+- Builds clean with `dotnet build`.
 
 ## Build
 
 ```
-build.bat        # uses %WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
+build.bat        # dotnet publish -> publish\MonitorSwitch.exe (self-contained single file)
 ```
-Produces `MonitorSwitch.exe` with the icon embedded (`/win32icon`), no console
-window (`/target:winexe`).
+The .NET 8 SDK on this dev machine is a per-user install at
+`%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe` (not on PATH; build.bat handles
+both). `nuget.config` exists only so restore can pull runtime packs for
+self-contained publishing — do not add package references.
 
-Installer: open `MonitorSwitch.iss` in Inno Setup 6 and compile, or
-`ISCC.exe MonitorSwitch.iss`. Output lands in `Output\MonitorSwitch-Setup-<ver>.exe`.
+Installer: `ISCC.exe MonitorSwitch.iss` (Inno Setup 6) after build.bat.
+Output lands in `Output\MonitorSwitch-Setup-<ver>.exe`.
+
+CI: `.github/workflows/build.yml` publishes the exe as an artifact on push.
 
 ## Hard constraints — do not violate
 
-1. **C# 5 syntax only.** The in-box csc (v4.0.30319) predates C# 6. No string
-   interpolation (`$""`), no null-conditional (`?.`), no expression-bodied
-   members, no `nameof`, no out-var declarations in calls. Anonymous
-   `delegate { }` syntax is used throughout; keep that style.
-2. **No admin rights anywhere.** Per-user install (`PrivilegesRequired=lowest`),
+1. **No admin rights anywhere.** Per-user install (`PrivilegesRequired=lowest`),
    HKCU-only registry, config in `%APPDATA%`. Nothing may require elevation.
-3. **No external dependencies.** No NuGet, no bundled DLLs. If a change needs a
-   library, push back.
-4. **DLL search-path hardening stays.** All `dxva2.dll` P/Invokes carry
-   `[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]` (dxva2 is not
-   a KnownDLL; this blocks planting attacks). Any new P/Invoke to a non-KnownDLL
-   must get the same attribute. `user32.dll` is a KnownDLL and doesn't need it.
+2. **No NuGet dependencies.** BCL only (`HttpClient`, `System.Text.Json`,
+   WinForms). DPAPI is P/Invoked (crypt32) precisely to avoid the
+   ProtectedData package. If a change needs a library, push back.
+3. **DLL search-path hardening stays.** All non-KnownDLL P/Invokes carry
+   `[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]` (dxva2.dll
+   especially; this blocks planting attacks). Any new P/Invoke to a
+   non-KnownDLL must get the same attribute.
+4. **Sync must stay optional.** Every DDC/profile feature works signed-out and
+   offline; network failures degrade to warning balloons, never dialogs or
+   blocked UI.
 
 ## Coupling points (change together or break things)
 
-- **Mutex name** `MonitorInputSwitcher_SingleInstance_7E04BDB0` — defined as
-  `MutexName` in MonitorSwitch.cs AND as `AppMutex` in MonitorSwitch.iss. Must
-  match exactly (installer uses it to detect a running copy before upgrades).
+- **Mutex name** `MonitorInputSwitcher_SingleInstance_7E04BDB0` — `MutexName`
+  in src/Program.cs AND `AppMutex` in MonitorSwitch.iss. Must match exactly.
 - **Startup registry value** `MonitorSwitch` under
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — written by the
-  installer's `startupicon` task AND by the app's in-window checkbox
-  (`RunValueName` const). Must stay the same name so they control one setting.
-- **Version** — bump in two places for every release: `AssemblyVersion` /
-  `AssemblyFileVersion` in the .cs, `MyAppVersion` in the .iss.
+  `HKCU\...\CurrentVersion\Run` — written by the installer's `startupicon`
+  task AND the app's checkbox (`RunValueName` in src/TrayApp.cs).
+- **Version** — bump in two places: `Version`/`AssemblyVersion`/`FileVersion`
+  in MonitorSwitch.csproj, `MyAppVersion` in MonitorSwitch.iss.
 - **Installer AppId GUID** `{7E04BDB0-0970-4FC3-B0F2-EF204F09A3C3}` — never
   change; it's the upgrade/uninstall identity.
+- **Supabase project** `monitor-switch` (ref `cvnpmmmkzphhgmimfrpi`, org
+  "Noodle House Incorporated") — `SupabaseUrl`/`ApiKey` constants in
+  src/SyncClient.cs. The publishable key is safe to embed; **RLS is the
+  security boundary** — every policy on `public.profiles` requires
+  `user_id = auth.uid()`. Schema changes go through Supabase migrations AND
+  the wire DTOs in SyncClient.cs together.
 
-## Architecture (single file, MonitorSwitch.cs)
+## Architecture (src/)
 
-- `Native` — P/Invoke (dxva2.dll DDC/CI + user32 enum/DestroyIcon).
-- `Ddc` — monitor enumeration and VCP 0x60 read/write.
-  `ApplyProfile` (write), `CaptureCurrent` (all-or-null read, used for saving
-  profiles), `ReadInputs` (per-monitor read with -1 sentinel, used for live
-  status), `DetectInputs` (formatted string for balloons).
-- `Profile` — Name + List<uint> Values (index = monitor enumeration order).
-  Empty Values list = "not set" (deleted/fresh slot); see `IsSet`.
-- `Program` — tray icon + context menu; main window (`ShowMainWindow`,
-  modeless, singleton via `mainWindow` field); capture/delete/apply flows;
-  config persistence at `%APPDATA%\MonitorSwitch\config.txt`
-  (format: `ProfileA = Name | v0, v1, ...`; empty value list is valid and means
-  unset — LoadConfig must keep accepting that or deleted profiles resurrect);
-  startup checkbox (HKCU Run); embedded help text (`ShowHelp`); single-instance
-  mutex in `Main`, app body in `RunApp`.
+- `Native.cs` — P/Invoke: dxva2 DDC/CI, user32, crypt32 DPAPI.
+- `Ddc.cs` — enumeration + VCP 0x60. `ApplyProfile` (write), `CaptureCurrent`
+  (all-or-null read, for saving), `ReadInputs` (-1 sentinel, live status),
+  `DetectInputs` (balloon string).
+- `Profile.cs` — Name + Values (index = monitor enumeration order) +
+  `UpdatedAtUtc` (MinValue = untouched built-in default, never pushed to
+  cloud). Empty Values = "not set"; see `TrayApp.IsSet`.
+- `ConfigStore.cs` — `%APPDATA%\MonitorSwitch\config.json`; auto-migrates
+  v1.x `config.txt` (empty value list stays valid = deleted slot, or deleted
+  profiles resurrect).
+- `AuthStore.cs` — email + refresh token in `auth.dat`, DPAPI-encrypted
+  (CurrentUser).
+- `SyncClient.cs` — raw Supabase REST (GoTrue password/refresh grants,
+  PostgREST upsert with `Prefer: resolution=merge-duplicates`). Throws
+  `SyncException` with user-showable messages.
+- `TrayApp.cs` — tray menu, profile actions, startup checkbox plumbing, and
+  sync orchestration: per-slot last-write-wins with 1s slack
+  (`MergeSlot`), push-after-save fire-and-forget, silent restore+sync at
+  startup. `MachineName` honors the `MONITORSWITCH_MACHINE` env var (test
+  hook for simulating a second machine).
+- `MainWindow.cs` — modeless singleton window incl. the Sync group box.
+- `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init).
+
+## Sync model (decided, don't redesign casually)
+
+Rows in `public.profiles` are keyed `(user_id, machine_name, slot)` — each
+machine syncs only its own two slots. The cloud is per-machine backup +
+remote edit, NOT a shared profile set: profiles reference monitors by
+enumeration index, so they're meaningless on other hardware.
 
 ## Behavioral decisions already made (don't regress)
 
-- Deleting a profile resets the slot to "(not set)" and persists as an empty
-  value list; the menu button remains and warns if clicked.
-- Double-click on tray icon opens the main window (NOT toggle — toggle lives in
-  the tray menu item and window button; `ToggleProfiles` prefers a saved slot
-  if the natural target is empty).
-- Friendly input names via `FriendlyInput` (MCCS standard values: 1/2 VGA,
-  3/4 DVI, 15/16 DP, 17/18 HDMI; fallback "Input N"). Used in window, dialogs,
-  balloons.
+- Deleting a profile resets the slot to "(not set)", persists as an empty
+  value list (and syncs that way); the menu button remains and warns if
+  clicked.
+- Double-click on tray icon opens the main window (NOT toggle);
+  `ToggleProfiles` prefers a saved slot if the natural target is empty.
+- Friendly input names via `FriendlyInput` (MCCS: 1/2 VGA, 3/4 DVI, 15/16 DP,
+  17/18 HDMI; fallback "Input N").
 - Uninstall leaves `%APPDATA%\MonitorSwitch` in place (user data).
-- Monitor identity is enumeration order (index), which can shift after driver/
-  topology changes — known limitation, documented in SETUP.md; don't try to
-  "fix" silently.
-
-## Known-risk areas for first compile
-
-- `ShowMainWindow` (largest recent addition) — layout code, closures in the
-  per-profile button loop (loop-body locals `slot`/`isA` are intentional for
-  correct capture).
-- `Main`/`RunApp` split with the mutex try/finally.
-- The help text string concatenation blocks (easy place for a stray quote).
+- Monitor identity is enumeration order — known limitation, documented in
+  SETUP.md; don't "fix" silently.
+- Supabase email confirmation is ON (project default): Create account →
+  confirmation email → Sign in. The app's copy accounts for this.
 
 ## Testing notes
 
-- DDC/CI behavior needs real monitors; there is no mock layer. Smoke-test:
-  build, run, tray icon appears, window opens, Detect reads plausible values.
-- Balloon tips may be suppressed if Windows Focus Assist is on — not a bug.
+- DDC/CI needs real monitors; no mock layer. Smoke-test: build, run, tray
+  icon appears, window opens, Detect reads plausible values.
+- Sync: rows are visible via Supabase SQL; use `MONITORSWITCH_MACHINE` to
+  fake a second machine. Timestamps within 1s count as in-sync by design.
+- Balloon tips may be suppressed by Focus Assist — not a bug.
 - Some monitors report different read vs write values for VCP 0x60 (spec
-  allows it); capture-then-switch mismatches on exotic hardware are a known
-  possibility, not a code bug.
+  allows it) — capture/switch mismatches on exotic hardware are known.

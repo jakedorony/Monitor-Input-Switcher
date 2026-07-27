@@ -5,16 +5,16 @@
 ; starts the app at sign-in.
 ;
 ; HOW TO BUILD THE INSTALLER:
-;   1. Build MonitorSwitch.exe first (run build.bat).
+;   1. Build publish\MonitorSwitch.exe first (run build.bat).
 ;   2. Install Inno Setup (free): https://jrsoftware.org/isdl.php
 ;   3. Open this file in Inno Setup and click Build > Compile
 ;      (or run:  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" MonitorSwitch.iss)
 ;   4. The finished installer appears in the .\Output folder as
-;      MonitorSwitch-Setup-1.0.0.exe
+;      MonitorSwitch-Setup-<version>.exe
 ; ---------------------------------------------------------------------------
 
 #define MyAppName "Monitor Input Switcher"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "2.0.0"
 #define MyAppExeName "MonitorSwitch.exe"
 #define MyAppPublisher "Monitor Input Switcher"
 
@@ -65,7 +65,7 @@ Name: "desktopicon"; \
     Flags: unchecked
 
 [Files]
-Source: "MonitorSwitch.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish\MonitorSwitch.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Optional supporting files - included only if present next to the script.
 Source: "SETUP.md";          DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
@@ -94,6 +94,6 @@ Filename: "{app}\{#MyAppExeName}"; \
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#MyAppExeName} /F"; \
     Flags: runhidden; RunOnceId: "StopMonitorSwitch"
 
-; Note: per-user settings at %APPDATA%\MonitorSwitch\config.txt are intentionally
-; left in place on uninstall (treated as user data). Delete that folder manually
-; if you want a completely clean removal.
+; Note: per-user settings at %APPDATA%\MonitorSwitch (config.json and the
+; encrypted sync sign-in auth.dat) are intentionally left in place on uninstall
+; (treated as user data). Delete that folder manually for a clean removal.
