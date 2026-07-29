@@ -45,7 +45,7 @@ namespace MonitorSwitch
             if (upgraded) ConfigStore.Save(ProfileA, ProfileB);
 
             Tray = new NotifyIcon();
-            Tray.Icon = BuildIcon();
+            Tray.Icon = AppIcon(16);
             Tray.Text = "Monitor Input Switcher";
             Tray.Visible = true;
 
@@ -117,6 +117,7 @@ namespace MonitorSwitch
             // Silent sign-in + initial sync in the background; the app is
             // fully usable while (and whether or not) this completes.
             InitSyncAsync();
+            CheckForUpdatesAsync();
 
             Application.Run();
         }
@@ -342,6 +343,42 @@ namespace MonitorSwitch
             if (h != null) h();
         }
 
+        // Once-a-day update check; balloon opens the download page on click.
+        static bool updateBalloonActive;
+
+        static async void CheckForUpdatesAsync()
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(15));   // stay out of startup's way
+                string tag = await UpdateCheck.DailyCheckAsync();
+                if (tag == null) return;
+
+                Tray.BalloonTipClicked += OnUpdateBalloonClicked;
+                Tray.BalloonTipClosed += delegate { updateBalloonActive = false; };
+                updateBalloonActive = true;
+                Tray.ShowBalloonTip(10000, "Monitor Input Switcher",
+                    "Version " + tag.TrimStart('v', 'V') +
+                    " is available - click here to download.", ToolTipIcon.Info);
+            }
+            catch { }
+        }
+
+        static void OnUpdateBalloonClicked(object sender, EventArgs e)
+        {
+            if (!updateBalloonActive) return;
+            updateBalloonActive = false;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = UpdateCheck.DownloadPage,
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        }
+
         static async void InitSyncAsync()
         {
             try
@@ -433,6 +470,22 @@ namespace MonitorSwitch
                 });
             }
             return false;
+        }
+
+        // Loads the app icon (embedded MonitorSwitch.ico) at the requested
+        // size; falls back to a drawn placeholder if the resource is missing.
+        public static Icon AppIcon(int size)
+        {
+            try
+            {
+                using (var s = typeof(TrayApp).Assembly
+                    .GetManifestResourceStream("MonitorSwitch.AppIcon"))
+                {
+                    if (s != null) return new Icon(s, size, size);
+                }
+            }
+            catch { }
+            return BuildIcon();
         }
 
         static Icon BuildIcon()

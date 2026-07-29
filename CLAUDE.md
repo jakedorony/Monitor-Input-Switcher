@@ -8,9 +8,10 @@ Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 2.1.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+- Version 2.2.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
   (`MyAppVersion`). v2.0 = the .NET 8 port + per-machine sync; v2.1 = shared
-  profiles matched by monitor hardware id. The single-file C#5 original
+  profiles matched by monitor hardware id; v2.2 = publishing prep (real
+  icon, update checker, crash log, release workflow, LICENSE/README). The single-file C#5 original
   lives in git history; the user runs an installed copy at
   `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (v2.0.0 as of 2026-07-27;
   installers upgrade it in place via the shared AppId).
@@ -30,6 +31,10 @@ Installer: `ISCC.exe MonitorSwitch.iss` (Inno Setup 6) after build.bat.
 Output lands in `Output\MonitorSwitch-Setup-<ver>.exe`.
 
 CI: `.github/workflows/build.yml` publishes the exe as an artifact on push.
+Releases: push a tag `vX.Y.Z` (matching the two version fields!) and
+`.github/workflows/release.yml` builds and publishes a GitHub Release with
+the installer + exe. winget manifests live in `winget/` — update the version,
+URL, and sha256 per release before submitting to microsoft/winget-pkgs.
 
 ## Hard constraints — do not violate
 
@@ -92,7 +97,13 @@ CI: `.github/workflows/build.yml` publishes the exe as an artifact on push.
   push-after-save fire-and-forget, silent restore+sync at startup, legacy
   positional→id upgrade on launch.
 - `MainWindow.cs` — modeless singleton window incl. the Sync group box.
-- `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init).
+- `UpdateCheck.cs` — daily GitHub Releases check (state in
+  `update-check.txt`; notifies once per release, click opens the page).
+- `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash
+  logging to `%APPDATA%\MonitorSwitch\log.txt`).
+- App icon: `MonitorSwitch.ico` doubles as `ApplicationIcon` and an
+  `EmbeddedResource` with LogicalName `MonitorSwitch.AppIcon` (loaded by
+  `TrayApp.AppIcon(size)` — keep the two in sync in the csproj).
 
 ## Sync model (decided, don't redesign casually)
 

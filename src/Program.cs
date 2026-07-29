@@ -1,6 +1,7 @@
-// Program.cs - entry point and single-instance guard.
+// Program.cs - entry point, single-instance guard, and crash logging.
 
 using System;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -16,6 +17,19 @@ namespace MonitorSwitch
         [STAThread]
         static void Main()
         {
+            // Crash logging: unexpected errors land in
+            // %APPDATA%\MonitorSwitch\log.txt so bug reports have substance.
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object s, ThreadExceptionEventArgs e)
+            {
+                LogCrash(e.Exception, "UI thread");
+            };
+            AppDomain.CurrentDomain.UnhandledException +=
+                delegate(object s, UnhandledExceptionEventArgs e)
+            {
+                LogCrash(e.ExceptionObject as Exception, "fatal");
+            };
+
             Application.SetHighDpiMode(HighDpiMode.SystemAware);
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -48,6 +62,19 @@ namespace MonitorSwitch
                 singleInstance.ReleaseMutex();
                 singleInstance.Dispose();
             }
+        }
+
+        static void LogCrash(Exception ex, string origin)
+        {
+            try
+            {
+                Directory.CreateDirectory(ConfigStore.Dir);
+                File.AppendAllText(Path.Combine(ConfigStore.Dir, "log.txt"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " [" + origin + "] " +
+                    (ex == null ? "(unknown exception)" : ex.ToString()) +
+                    Environment.NewLine + Environment.NewLine);
+            }
+            catch { }
         }
     }
 }

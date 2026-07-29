@@ -14,7 +14,7 @@
 ; ---------------------------------------------------------------------------
 
 #define MyAppName "Monitor Input Switcher"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.2.0"
 #define MyAppExeName "MonitorSwitch.exe"
 #define MyAppPublisher "Monitor Input Switcher"
 

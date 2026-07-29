@@ -28,7 +28,7 @@ namespace MonitorSwitch
             form.MaximizeBox = false;
             form.StartPosition = FormStartPosition.CenterScreen;
             form.ClientSize = new Size(484, 600);
-            form.Icon = TrayApp.Tray.Icon;
+            form.Icon = TrayApp.AppIcon(32);
 
             // --- Monitors right now ---
             var gbStatus = new GroupBox();

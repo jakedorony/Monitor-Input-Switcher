@@ -9,9 +9,9 @@
     <ApplicationIcon>MonitorSwitch.ico</ApplicationIcon>
 
     <!-- Version: bump here AND in MonitorSwitch.iss (MyAppVersion). -->
-    <Version>2.1.0</Version>
-    <AssemblyVersion>2.1.0.0</AssemblyVersion>
-    <FileVersion>2.1.0.0</FileVersion>
+    <Version>2.2.0</Version>
+    <AssemblyVersion>2.2.0.0</AssemblyVersion>
+    <FileVersion>2.2.0.0</FileVersion>
 
     <AssemblyTitle>Monitor Input Switcher</AssemblyTitle>
     <Product>Monitor Input Switcher</Product>
@@ -29,5 +29,11 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same .ico as ApplicationIcon, embedded so the tray/windows can load
+         crisp sizes at runtime (TrayApp.AppIcon). -->
+    <EmbeddedResource Include="MonitorSwitch.ico" LogicalName="MonitorSwitch.AppIcon" />
+  </ItemGroup>
 
 </Project>
