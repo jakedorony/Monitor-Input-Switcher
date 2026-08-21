@@ -2,7 +2,7 @@
 # microsoft/winget-pkgs under manifests/j/jakedorony/MonitorInputSwitcher/<version>/
 # (easiest: `wingetcreate submit` or the "Add a package" flow on that repo).
 PackageIdentifier: jakedorony.MonitorInputSwitcher
-PackageVersion: 2.2.1
+PackageVersion: 2.3.0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
