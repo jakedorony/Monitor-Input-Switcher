@@ -9,9 +9,9 @@
     <ApplicationIcon>MonitorSwitch.ico</ApplicationIcon>
 
     <!-- Version: bump here AND in MonitorSwitch.iss (MyAppVersion). -->
-    <Version>2.2.1</Version>
-    <AssemblyVersion>2.2.1.0</AssemblyVersion>
-    <FileVersion>2.2.1.0</FileVersion>
+    <Version>2.3.0</Version>
+    <AssemblyVersion>2.3.0.0</AssemblyVersion>
+    <FileVersion>2.3.0.0</FileVersion>
 
     <AssemblyTitle>Monitor Input Switcher</AssemblyTitle>
     <Product>Monitor Input Switcher</Product>
