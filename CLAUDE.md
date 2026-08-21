@@ -8,11 +8,12 @@ Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 2.2.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+- Version 2.2.1 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
   (`MyAppVersion`). v2.0 = the .NET 8 port + per-machine sync; v2.1 = shared
   profiles matched by monitor hardware id; v2.2 = publishing prep (real
-  icon, update checker, crash log, release workflow, LICENSE/README). The single-file C#5 original
-  lives in git history; the user runs an installed copy at
+  icon, update checker, crash log, release workflow, LICENSE/README);
+  v2.2.1 = leftover-pairing fix for monitors whose PnP id differs per PC.
+  The single-file C#5 original lives in git history; the user runs an installed copy at
   `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (v2.0.0 as of 2026-07-27;
   installers upgrade it in place via the shared AppId).
 - Builds clean with `dotnet build`.
@@ -76,9 +77,11 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
 - `Native.cs` — P/Invoke: dxva2 DDC/CI, user32 (incl. GetMonitorInfoW /
   EnumDisplayDevicesW for monitor identity), crypt32 DPAPI.
 - `Ddc.cs` — enumeration + VCP 0x60. Each `PhysMon` gets an `Id` = PnP
-  hardware id (e.g. "DEL40A8"; duplicates get "#2", "#3"). `ApplyProfile`
-  matches saved inputs by id first, positional fallback for legacy null-id
-  entries. `CaptureCurrent` (all-or-null, keyed by id), `ReadInputs`,
+  hardware id (e.g. "DEL40A8"; duplicates get "#2", "#3"). `Plan` does the
+  three-tier match (id / legacy positional / leftover pairing — see Sync
+  model) and `ApplyProfile` returns an `ApplyOutcome` counting applied,
+  failed and unmatched monitors. `CaptureCurrent` (all-or-null, keyed by id),
+  `ReadInputs`,
   `DetectInputs`, `UpgradeLegacyEntries` (fills ids into positional data).
 - `Profile.cs` — Name + `Inputs` (List<InputSetting>{MonitorId, Value};
   MonitorId null = legacy positional) + `UpdatedAtUtc` (MinValue = untouched
@@ -113,9 +116,23 @@ monitors are plugged into all the user's PCs; Profile A/B mean "send the
 monitors to PC A / PC B", so every machine needs both. Inputs are stored per
 monitor hardware id (`inputs` jsonb: `[{"monitor":"DEL40A8","value":15}]`),
 not per enumeration position, so PCs that enumerate the monitors in
-different orders still apply them correctly. Identical monitor models get
+different orders still apply them correctly.
+
+**A monitor's PnP id is not guaranteed stable across PCs.** Verified on real
+hardware: one Dell panel reports `DELA07A` on one machine and `DELA07B` on
+another (the product code varies with the active input). `Ddc.Plan` therefore
+matches in three tiers — exact id, then legacy positional (null-id) entries,
+then leftover pairing of any still-unmatched monitor with the next unclaimed
+entry. Exact matches always win; pairing only consumes leftovers. Do not
+"simplify" this back to id-only matching — that is the v2.1 bug where a
+synced profile silently switched only one of two monitors.
+
+Connected monitors that end up with no entry at all are counted in
+`ApplyOutcome.Unmatched` and surfaced as a warning balloon. Never go back to
+silently skipping them: reporting success while leaving a monitor untouched
+is what made that bug so hard to see. Identical monitor models still get
 "#2"-style suffixes in enumeration order — a swap between two identical
-models across PCs is the one remaining (accepted) ambiguity.
+models across PCs remains an accepted ambiguity.
 
 ## Behavioral decisions already made (don't regress)
 

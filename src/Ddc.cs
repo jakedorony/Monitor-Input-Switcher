@@ -70,8 +70,11 @@ namespace MonitorSwitch
         }
 
         // PnP hardware id for the iDevNum-th monitor on a GDI display device,
-        // e.g. "MONITOR\DEL40A8\{...}\0001" -> "DEL40A8". Stable for the same
-        // physical monitor across PCs. "" if it can't be determined.
+        // e.g. "MONITOR\DEL40A8\{...}\0001" -> "DEL40A8". USUALLY the same
+        // for a given physical monitor on any PC, but NOT guaranteed: some
+        // panels report a different product code per input (a Dell here shows
+        // DELA07A on one machine and DELA07B on another), which is why Plan()
+        // needs its leftover-pairing fallback. "" if it can't be determined.
         static string HardwareId(string gdiDevice, uint iDevNum)
         {
             if (string.IsNullOrEmpty(gdiDevice)) return "";
@@ -89,43 +92,96 @@ namespace MonitorSwitch
                 Native.DestroyPhysicalMonitor(m.Handle);
         }
 
-        // Finds the saved input for one connected monitor: identity match
-        // first, then positional fallback for legacy null-id entries.
-        static bool TryGetValueFor(Profile p, PhysMon mon, int position, out uint value)
+        // Result of applying a profile, detailed enough to tell the user the
+        // truth (a monitor we could not match is NOT a success).
+        public class ApplyOutcome
         {
-            value = 0;
-            if (mon.Id.Length > 0)
-            {
-                foreach (var e in p.Inputs)
-                    if (e.MonitorId == mon.Id) { value = e.Value; return true; }
-            }
-            if (position < p.Inputs.Count && p.Inputs[position].MonitorId == null)
-            {
-                value = p.Inputs[position].Value;
-                return true;
-            }
-            return false;
+            public bool NoMonitors;
+            public int Applied;         // writes accepted
+            public int Failures;        // SetVCPFeature rejected the write
+            public int Unmatched;       // connected monitors with nothing to apply
+            public int Paired;          // matched by leftover pairing, not by id
         }
 
-        // Returns number of failures, or -1 if no monitors were found.
-        public static int ApplyProfile(Profile p)
+        // Decides which saved input goes to which connected monitor.
+        //
+        // 1. Exact hardware-id match - the normal path.
+        // 2. Legacy positional entries (MonitorId null) by position.
+        // 3. Leftover pairing: any monitor still unmatched takes the next
+        //    unused entry, in order.
+        //
+        // Step 3 exists because a monitor's PnP id is NOT always stable across
+        // PCs: the same Dell panel reports DELA07A on one machine and DELA07B
+        // on another. Without it that monitor silently never switches on the
+        // second PC. Pairing only ever consumes entries no monitor claimed by
+        // id, so exact matches always win.
+        public static void Plan(Profile p, List<PhysMon> mons,
+            out uint[] values, out bool[] hasValue, out int paired, out int unmatched)
         {
+            values = new uint[mons.Count];
+            hasValue = new bool[mons.Count];
+            var entryUsed = new bool[p.Inputs.Count];
+            paired = 0;
+            unmatched = 0;
+
+            for (int i = 0; i < mons.Count; i++)
+            {
+                if (mons[i].Id.Length == 0) continue;
+                for (int e = 0; e < p.Inputs.Count; e++)
+                {
+                    if (entryUsed[e] || p.Inputs[e].MonitorId != mons[i].Id) continue;
+                    values[i] = p.Inputs[e].Value;
+                    hasValue[i] = true;
+                    entryUsed[e] = true;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < mons.Count && i < p.Inputs.Count; i++)
+            {
+                if (hasValue[i] || entryUsed[i] || p.Inputs[i].MonitorId != null) continue;
+                values[i] = p.Inputs[i].Value;
+                hasValue[i] = true;
+                entryUsed[i] = true;
+            }
+
+            int next = 0;
+            for (int i = 0; i < mons.Count; i++)
+            {
+                if (hasValue[i]) continue;
+                while (next < p.Inputs.Count && entryUsed[next]) next++;
+                if (next >= p.Inputs.Count) { unmatched++; continue; }
+                values[i] = p.Inputs[next].Value;
+                hasValue[i] = true;
+                entryUsed[next] = true;
+                paired++;
+            }
+        }
+
+        public static ApplyOutcome ApplyProfile(Profile p)
+        {
+            var outcome = new ApplyOutcome();
             var monitors = GetMonitors();
-            int failures = 0;
             try
             {
-                if (monitors.Count == 0) return -1;
+                if (monitors.Count == 0) { outcome.NoMonitors = true; return outcome; }
+
+                uint[] values; bool[] hasValue; int paired, unmatched;
+                Plan(p, monitors, out values, out hasValue, out paired, out unmatched);
+                outcome.Paired = paired;
+                outcome.Unmatched = unmatched;
+
                 for (int i = 0; i < monitors.Count; i++)
                 {
-                    uint value;
-                    if (!TryGetValueFor(p, monitors[i], i, out value))
-                        continue;   // nothing saved for this monitor
-                    if (!Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, value))
-                        failures++;
+                    if (!hasValue[i]) continue;
+                    if (Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, values[i]))
+                        outcome.Applied++;
+                    else
+                        outcome.Failures++;
                 }
             }
             finally { Release(monitors); }
-            return failures;
+            return outcome;
         }
 
         public static string DetectInputs()

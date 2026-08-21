@@ -220,18 +220,35 @@ namespace MonitorSwitch
                     "use \"Save current setup...\" first.", ToolTipIcon.Warning);
                 return;
             }
-            int failures = Ddc.ApplyProfile(p);
+            Ddc.ApplyOutcome r = Ddc.ApplyProfile(p);
             lastProfile = p;
-            if (failures == 0)
-                Tray.ShowBalloonTip(1500, "Monitor Switch",
-                    "Switched to: " + p.Name, ToolTipIcon.Info);
-            else if (failures < 0)
+
+            if (r.NoMonitors)
+            {
                 Tray.ShowBalloonTip(3000, "Monitor Switch",
                     "No DDC/CI-capable monitors found.", ToolTipIcon.Error);
-            else
+                return;
+            }
+            if (r.Failures > 0)
+            {
                 Tray.ShowBalloonTip(3000, "Monitor Switch",
-                    p.Name + ": " + failures + " monitor(s) failed (DDC/CI off?)",
+                    p.Name + ": " + r.Failures + " monitor(s) refused the switch " +
+                    "(DDC/CI off, or that input isn't available on the monitor?)",
                     ToolTipIcon.Warning);
+                return;
+            }
+            if (r.Unmatched > 0)
+            {
+                // Previously this case silently reported success while leaving
+                // a monitor untouched - the "only one monitor switches" bug.
+                Tray.ShowBalloonTip(3000, "Monitor Switch",
+                    p.Name + ": switched " + r.Applied + " monitor(s), but " +
+                    r.Unmatched + " had nothing saved in this profile. " +
+                    "Save the setup again to include it.", ToolTipIcon.Warning);
+                return;
+            }
+            Tray.ShowBalloonTip(1500, "Monitor Switch",
+                "Switched to: " + p.Name, ToolTipIcon.Info);
         }
 
         // Reads current monitor inputs, asks for a name via dialog, stores into
