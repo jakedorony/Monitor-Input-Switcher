@@ -125,5 +125,25 @@ namespace MonitorSwitch
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [DllImport("kernel32.dll")]
         public static extern IntPtr LocalFree(IntPtr hMem);
+
+        // ----- DDC/CI capabilities string (which inputs a monitor supports) -----
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("dxva2.dll", SetLastError = true)]
+        public static extern bool GetCapabilitiesStringLength(IntPtr hMonitor, ref uint length);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("dxva2.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+        public static extern bool CapabilitiesRequestAndCapabilitiesReply(
+            IntPtr hMonitor, System.Text.StringBuilder buffer, uint length);
+
+        // ----- Dark title bar (dwmapi is not a KnownDLL - keep the attribute) -----
+
+        public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(
+            IntPtr hwnd, int attribute, ref int value, int size);
     }
 }

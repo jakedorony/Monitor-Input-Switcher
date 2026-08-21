@@ -39,6 +39,11 @@ namespace MonitorSwitch
             var a = ProfileA; var b = ProfileB;
             ConfigStore.Load(ref a, ref b);
             ProfileA = a; ProfileB = b;
+            Theme.Set(Theme.Parse(ConfigStore.Theme));
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate(object s, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+            {
+                if (e.Category == Microsoft.Win32.UserPreferenceCategory.General) Theme.Resolve();
+            };
 
             // Upgrade legacy positional entries (v1.x/v2.0 data) to monitor
             // identities using whatever is plugged in right now. Harmless to
@@ -173,6 +178,14 @@ namespace MonitorSwitch
                 default: return "Input " + v;
             }
             return name + " (" + v + ")";
+        }
+
+        // Input name without the numeric code, for the window ("DisplayPort 1").
+        public static string InputName(int v)
+        {
+            string f = FriendlyInput(v);
+            int paren = f.LastIndexOf(" (");
+            return paren > 0 ? f.Substring(0, paren) : f;
         }
 
         // Multi-line description of a profile's saved inputs, friendly names included.
@@ -310,6 +323,7 @@ namespace MonitorSwitch
             prof.UpdatedAtUtc = DateTime.UtcNow;
             if (slot == 'A') { ProfileA = prof; itemA.Text = prof.Name; }
             else             { ProfileB = prof; itemB.Text = prof.Name; }
+            RaiseProfilesChanged();
 
             if (SaveConfig())
                 Tray.ShowBalloonTip(2000, "Monitor Switch",
@@ -349,6 +363,7 @@ namespace MonitorSwitch
             empty.UpdatedAtUtc = DateTime.UtcNow;
             if (slot == 'A') { ProfileA = empty; itemA.Text = empty.Name; }
             else             { ProfileB = empty; itemB.Text = empty.Name; }
+            RaiseProfilesChanged();
             if (lastSlot == slot) lastSlot = '\0';
 
             if (SaveConfig())
@@ -482,6 +497,72 @@ namespace MonitorSwitch
 
         // Fire-and-forget push after a local save/delete. Local persistence
         // already succeeded; a cloud failure only costs a warning balloon.
+        // Raised after profiles change for any reason (save, delete, edit,
+        // sync adopt) so open windows can repaint.
+        public static event Action ProfilesChanged;
+        static void RaiseProfilesChanged()
+        {
+            var h = ProfilesChanged;
+            if (h != null) h();
+        }
+
+        public static string SyncStatusText()
+        {
+            if (!SyncClient.IsSignedIn) return "Not signed in";
+            if (LastSyncUtc == DateTime.MinValue) return "Signed in";
+            TimeSpan ago = DateTime.UtcNow - LastSyncUtc;
+            if (ago < TimeSpan.FromMinutes(1)) return "Synced just now";
+            if (ago < TimeSpan.FromHours(1)) return "Synced " + (int)ago.TotalMinutes + " min ago";
+            return "Synced " + LastSyncUtc.ToLocalTime().ToString("t");
+        }
+
+        // Sets one monitor's input inside a profile (the in-app editor), then
+        // persists and syncs like any other save.
+        public static void UpdateProfileInput(char slot, string monitorId, uint value)
+        {
+            Profile p = slot == 'A' ? ProfileA : ProfileB;
+            InputSetting hit = null;
+            foreach (var e in p.Inputs) if (e.Matches(monitorId)) { hit = e; break; }
+            if (hit == null) { hit = new InputSetting(monitorId, value); p.Inputs.Add(hit); }
+            else if (hit.Value == value) return;
+            else hit.Value = value;
+            p.UpdatedAtUtc = DateTime.UtcNow;
+            SaveConfig();
+            RaiseProfilesChanged();
+            PushAfterLocalChange();
+        }
+
+        public static void RenameProfile(char slot, string name)
+        {
+            Profile p = slot == 'A' ? ProfileA : ProfileB;
+            name = (name ?? "").Trim();
+            if (name.Length == 0 || name == p.Name) return;
+            p.Name = name;
+            p.UpdatedAtUtc = DateTime.UtcNow;
+            if (slot == 'A') itemA.Text = name; else itemB.Text = name;
+            SaveConfig();
+            RaiseProfilesChanged();
+            PushAfterLocalChange();
+        }
+
+        // Switches one connected monitor right now (the tile's "Change").
+        public static bool SetMonitorInput(string monitorId, uint value)
+        {
+            bool ok = Ddc.SetInput(monitorId, value);
+            if (!ok)
+                Tray.ShowBalloonTip(3000, "Monitor Switch",
+                    MonitorNames.Friendly(monitorId) + " refused the switch (DDC/CI off, or that input isn't available?)",
+                    ToolTipIcon.Warning);
+            return ok;
+        }
+
+        public static void SetTheme(ThemeMode mode)
+        {
+            ConfigStore.Theme = mode.ToString();
+            SaveConfig();
+            Theme.Set(mode);
+        }
+
         static async void PushAfterLocalChange()
         {
             if (!SyncClient.IsSignedIn) return;
@@ -521,6 +602,7 @@ namespace MonitorSwitch
                 itemA.Text = ProfileA.Name;
                 itemB.Text = ProfileB.Name;
                 SaveConfig();
+                RaiseProfilesChanged();
             }
 
             LastSyncUtc = DateTime.UtcNow;

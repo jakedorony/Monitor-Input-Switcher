@@ -38,7 +38,11 @@ namespace MonitorSwitch
         {
             public ProfileDto ProfileA { get; set; }
             public ProfileDto ProfileB { get; set; }
+            public string Theme { get; set; }            // "System" | "Light" | "Dark"; device-local
         }
+
+        // Device-local settings that ride in config.json next to the profiles.
+        public static string Theme = "System";
 
         public static string Dir
         {
@@ -68,6 +72,7 @@ namespace MonitorSwitch
                     var dto = JsonSerializer.Deserialize<ConfigDto>(File.ReadAllText(JsonPath));
                     if (dto != null)
                     {
+                        if (!string.IsNullOrEmpty(dto.Theme)) Theme = dto.Theme;
                         var a = FromDto(dto.ProfileA);
                         var b = FromDto(dto.ProfileB);
                         if (a != null) profileA = a;
@@ -99,7 +104,8 @@ namespace MonitorSwitch
                 var dto = new ConfigDto
                 {
                     ProfileA = ToDto(profileA),
-                    ProfileB = ToDto(profileB)
+                    ProfileB = ToDto(profileB),
+                    Theme = Theme
                 };
                 var opts = new JsonSerializerOptions
                 {

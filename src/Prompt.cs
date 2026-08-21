@@ -17,6 +17,9 @@ namespace MonitorSwitch
             form.MaximizeBox = false;
             form.ClientSize = new Size(340, 150);
             form.TopMost = true;
+            form.BackColor = Theme.Current.Bg;
+            form.ForeColor = Theme.Current.Text;
+            form.HandleCreated += delegate { Theme.ApplyTitleBar(form); };
 
             var label = new Label();
             label.Text = prompt;
@@ -24,6 +27,9 @@ namespace MonitorSwitch
             label.AutoSize = false;
 
             var box = new TextBox();
+            box.BackColor = Theme.Current.Field;
+            box.ForeColor = Theme.Current.Text;
+            box.BorderStyle = BorderStyle.FixedSingle;
             box.Text = defaultText;
             box.SetBounds(12, 85, 316, 24);
             box.SelectAll();

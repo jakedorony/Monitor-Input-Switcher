@@ -80,14 +80,17 @@ Your two named buttons are now ready and are remembered across restarts.
 
 - **Right-click** the tray icon → click either named button to switch, or use
   **"Switch (toggle A/B)"** to flip between the two.
-- **Double-click** the tray icon → opens the main window (live status, all the
-  buttons, and the sync section).
+- **Double-click** the tray icon → opens the main window: a big Personal /
+  Work switch, each monitor by name with its current input (change it right
+  there), and the two profiles with a dropdown per monitor so you can edit a
+  profile without touching the monitor buttons. The sun/moon pill switches
+  light and dark; the gear opens Settings.
 - A small popup confirms each switch.
 
 ### Optional: sync across computers
 
-Open the main window (double-click the tray icon) and find **"Sync across
-computers"**:
+Open the main window (double-click the tray icon), click the gear, and find
+**"Account & sync"**:
 
 1. Type an email and password and click **Create account** (one time only).
 2. Click the confirmation link in the email you receive, then press
@@ -144,9 +147,9 @@ If you have two PCs, install it on both.
   re-ordered monitor lists don't break them. Some monitors report a slightly
   different ID to each computer; the app works out which screens are the same
   and remembers it. If a profile ever sends a monitor to the wrong input
-  (typically after moving cables or swapping a monitor), open the main window
-  and click **Clear learned matches** under *Monitor matching*, then switch
-  again — your profiles themselves are untouched.
+  (typically after moving cables or swapping a monitor), open Settings (the
+  gear) and click **Clear learned matches** under *Monitor matching*, then
+  switch again — your profiles themselves are untouched.
 - To make the app stop starting at sign-in without uninstalling: re-run the
   installer and untick the startup option, or remove the "MonitorSwitch" entry
   under Task Manager → Startup apps.

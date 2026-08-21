@@ -75,14 +75,16 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
 
 ## Architecture (src/)
 
-- `Native.cs` — P/Invoke: dxva2 DDC/CI, user32 (incl. GetMonitorInfoW /
-  EnumDisplayDevicesW for monitor identity), crypt32 DPAPI.
+- `Native.cs` — P/Invoke: dxva2 DDC/CI (+ capabilities string), user32 (incl.
+  GetMonitorInfoW / EnumDisplayDevicesW for monitor identity), crypt32
+  DPAPI, dwmapi (dark title bar).
 - `Ddc.cs` — enumeration + VCP 0x60. Each `PhysMon` gets an `Id` = PnP
   hardware id (e.g. "DEL40A8"; duplicates get "#2", "#3"). `Plan` does the
   three-tier match (id / legacy positional / leftover pairing — see Sync
   model) and `ApplyProfile` returns an `ApplyOutcome` counting applied,
   failed and unmatched monitors. `CaptureCurrent` (all-or-null, keyed by id),
-  `ReadInputs`,
+  `ReadInputs`, `SupportedInputs`/`CachedInputs` (per-monitor 0x60 list from
+  the capabilities string, cached; `FallbackInputs` otherwise), `SetInput`,
   `DetectInputs`, `UpgradeLegacyEntries` (fills ids into positional data).
 - `Profile.cs` — Name + `Inputs` (List<InputSetting>{MonitorId, Value};
   MonitorId null = legacy positional) + `UpdatedAtUtc` (MinValue = untouched
@@ -100,8 +102,27 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   sync orchestration: per-slot last-write-wins with 1s slack (`MergeSlot`),
   push-after-save fire-and-forget, silent restore+sync at startup, legacy
   positional→id upgrade on launch.
-- `MainWindow.cs` — modeless singleton window incl. the Sync and Monitor
-  matching group boxes.
+- `MainWindow.cs` — modeless singleton themed window (`MainForm`): header
+  (sync pill, theme pill, gear), the `SegmentedSwitch` hero, one tile per
+  connected monitor with a live `InputPicker` (switches that monitor now),
+  two profile cards with per-monitor pickers (`TrayApp.UpdateProfileInput`),
+  footer (startup toggle, account, Advanced). Rebuilt wholesale on
+  `ProfilesChanged`/`SyncStateChanged`/`Theme.Changed` and on activation;
+  scales by `DeviceDpi` itself (`AutoScaleMode.None`, every size via `L()`).
+- `SettingsWindow.cs` — account/sync sign-in, appearance (System/Light/Dark),
+  startup, monitor matching (Clear learned matches), help/version.
+- `Controls.cs` — owner-drawn `Card`, `FlatButton`, `LinkAction`,
+  `SegmentedSwitch`, `ToggleSwitch`, `ThemePill`, `GlyphButton`,
+  `StatusPill`, `InputPicker` (themed dropdown; ComboBox ignores dark
+  BackColors). Glyphs come from Segoe MDL2 Assets (`Theme.Glyph*`).
+- `Theme.cs` — `Palette.Light/Dark`, `Theme.Mode` (System follows the
+  Windows app theme via `AppsUseLightTheme`; live via
+  `SystemEvents.UserPreferenceChanged`), `Theme.Changed`, dark title bars via
+  `DwmSetWindowAttribute`. Persisted as `"Theme"` in config.json (device-local,
+  never synced).
+- `MonitorNames.cs` — friendly names ("ASUS PG27AQDM") from the EDID in
+  `HKLM\SYSTEM\...\Enum\DISPLAY` (readable without admin). Display only;
+  identity is still the PnP id.
 - `UpdateCheck.cs` — daily GitHub Releases check (state in
   `update-check.txt`; notifies once per release, click opens the page).
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash

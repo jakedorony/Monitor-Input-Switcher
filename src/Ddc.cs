@@ -249,6 +249,94 @@ namespace MonitorSwitch
             return outcome;
         }
 
+        // ----- per-monitor input support & single-monitor switching -----------
+
+        // MCCS 0x60 values every picker should offer when a monitor does not
+        // report its own list (capabilities read failed or had no 60(...)).
+        static readonly uint[] DefaultInputs = { 15, 16, 17, 18, 3, 4, 1, 2 };
+        static readonly Dictionary<string, uint[]> inputCache = new Dictionary<string, uint[]>();
+
+        // Inputs a monitor says it supports, from its DDC/CI capabilities
+        // string ("60(11 12 0F)"). Slow (~1s) the first time, so cached per
+        // monitor id for the process lifetime; falls back to DefaultInputs.
+        public static uint[] SupportedInputs(string monitorId)
+        {
+            uint[] cached;
+            lock (inputCache) { if (inputCache.TryGetValue(monitorId, out cached)) return cached; }
+
+            uint[] result = null;
+            var monitors = GetMonitors();
+            try
+            {
+                foreach (var m in monitors)
+                {
+                    if (m.Id != monitorId) continue;
+                    result = ParseInputs(ReadCapabilities(m.Handle));
+                    break;
+                }
+            }
+            finally { Release(monitors); }
+
+            if (result == null || result.Length == 0) result = DefaultInputs;
+            lock (inputCache) { inputCache[monitorId] = result; }
+            return result;
+        }
+
+        // Non-blocking: the cached list, or null if SupportedInputs hasn't
+        // been asked for this monitor yet (callers warm it on a background
+        // thread and repaint when it lands).
+        public static uint[] CachedInputs(string monitorId)
+        {
+            lock (inputCache)
+            {
+                uint[] v;
+                return inputCache.TryGetValue(monitorId, out v) ? v : null;
+            }
+        }
+
+        public static uint[] FallbackInputs { get { return DefaultInputs; } }
+
+        static string ReadCapabilities(IntPtr h)
+        {
+            uint len = 0;
+            if (!Native.GetCapabilitiesStringLength(h, ref len) || len == 0) return null;
+            var sb = new System.Text.StringBuilder((int)len + 1);
+            return Native.CapabilitiesRequestAndCapabilitiesReply(h, sb, len) ? sb.ToString() : null;
+        }
+
+        // Pulls the hex values out of "... 60(11 12 0F) ..." -> {17, 18, 15}.
+        public static uint[] ParseInputs(string caps)
+        {
+            if (string.IsNullOrEmpty(caps)) return null;
+            int i = caps.IndexOf("60(", StringComparison.Ordinal);
+            if (i < 0) return null;
+            int close = caps.IndexOf(')', i);
+            if (close < 0) return null;
+            var list = new List<uint>();
+            foreach (string tok in caps.Substring(i + 3, close - i - 3).Split(' '))
+            {
+                uint v;
+                if (tok.Length > 0 && uint.TryParse(tok, System.Globalization.NumberStyles.HexNumber, null, out v) && v > 0)
+                    list.Add(v);
+            }
+            return list.ToArray();
+        }
+
+        // Switches ONE monitor (by id) to the given input. Returns false if the
+        // monitor is not connected or refused the write.
+        public static bool SetInput(string monitorId, uint value)
+        {
+            var monitors = GetMonitors();
+            try
+            {
+                foreach (var m in monitors)
+                    if (m.Id == monitorId)
+                        return Native.SetVCPFeature(m.Handle, VCP_INPUT, value);
+                return false;
+            }
+            finally { Release(monitors); }
+        }
+
         public static string DetectInputs()
         {
             var monitors = GetMonitors();

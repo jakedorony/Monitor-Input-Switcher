@@ -55,7 +55,8 @@ namespace MonitorSwitch
 "-----------------------------------------------------------\r\n" +
 "OPTIONAL: SYNC ACROSS COMPUTERS\r\n" +
 "-----------------------------------------------------------\r\n" +
-"Open the main window and look at \"Sync across computers\".\r\n" +
+"Open Settings (the gear in the main window) and look at\r\n" +
+"\"Account & sync\".\r\n" +
 "Create an account once (email + password, then click the\r\n" +
 "confirmation link we email you). Sign in with the same account\r\n" +
 "on each computer plugged into these monitors.\r\n" +
@@ -78,7 +79,8 @@ namespace MonitorSwitch
 "Rarely it can get that wrong - usually after you move cables\r\n" +
 "between ports, or plug in a different monitor. If a profile\r\n" +
 "starts sending a monitor to the wrong input, open the main\r\n" +
-"window, find \"Monitor matching\" and click \"Clear learned\r\n" +
+"window, open Settings (the gear), find \"Monitor matching\"\r\n" +
+"and click \"Clear learned\r\n" +
 "matches\". The app forgets what it worked out and starts\r\n" +
 "again next time you switch. Your profiles are not affected.\r\n" +
 "\r\n" +
@@ -107,6 +109,7 @@ namespace MonitorSwitch
             form.MinimumSize = new Size(420, 320);
             form.TopMost = true;
 
+            var panel = new Panel();
             var box = new TextBox();
             box.Multiline = true;
             box.ReadOnly = true;
@@ -114,11 +117,15 @@ namespace MonitorSwitch
             box.WordWrap = true;
             box.Dock = DockStyle.Fill;
             box.Font = new Font("Consolas", 9.5f);
-            box.BackColor = Color.White;
+            box.BackColor = Theme.Current.Card;
+            box.ForeColor = Theme.Current.Text;
+            box.BorderStyle = BorderStyle.None;
+            form.BackColor = Theme.Current.Bg;
+            panel.BackColor = Theme.Current.Bg;
+            form.HandleCreated += delegate { Theme.ApplyTitleBar(form); };
             box.Text = guide;
             box.Select(0, 0);
 
-            var panel = new Panel();
             panel.Dock = DockStyle.Bottom;
             panel.Height = 44;
 
