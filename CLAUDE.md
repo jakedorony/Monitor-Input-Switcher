@@ -99,7 +99,8 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   sync orchestration: per-slot last-write-wins with 1s slack (`MergeSlot`),
   push-after-save fire-and-forget, silent restore+sync at startup, legacy
   positional→id upgrade on launch.
-- `MainWindow.cs` — modeless singleton window incl. the Sync group box.
+- `MainWindow.cs` — modeless singleton window incl. the Sync and Monitor
+  matching group boxes.
 - `UpdateCheck.cs` — daily GitHub Releases check (state in
   `update-check.txt`; notifies once per release, click opens the page).
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash
@@ -126,6 +127,17 @@ then leftover pairing of any still-unmatched monitor with the next unclaimed
 entry. Exact matches always win; pairing only consumes leftovers. Do not
 "simplify" this back to id-only matching — that is the v2.1 bug where a
 synced profile silently switched only one of two monitors.
+
+**Learned aliases.** A forced pairing (exactly one monitor and one entry
+left over, and no positional guesses anywhere in the plan) proves the two ids
+are the same panel, so `Ddc.LearnAliases` records the monitor's id as an
+alias on that entry (`InputSetting.Aliases`). Aliases match in tier 2, are
+persisted (`"Aliases"` in config.json, `"aliases"` in the jsonb row - both
+omitted when empty, and older clients ignore them), and sync like any other
+profile change. Because an alias is an inference, the main window's "Monitor
+matching" group has "Clear learned matches" (`TrayApp.ForgetLearnedMatches`),
+which wipes them, bumps `UpdatedAtUtc`, and pushes so other PCs don't restore
+them. Keep that escape hatch; it is the only way to undo a wrong deduction.
 
 Connected monitors that end up with no entry at all are counted in
 `ApplyOutcome.Unmatched` and surfaced as a warning balloon. Never go back to

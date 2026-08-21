@@ -223,6 +223,15 @@ namespace MonitorSwitch
             Ddc.ApplyOutcome r = Ddc.ApplyProfile(p);
             lastProfile = p;
 
+            // Applying can teach us that two ids are the same panel. That is a
+            // real content change, so persist it and let the other PCs have it.
+            if (r.Learned > 0)
+            {
+                p.UpdatedAtUtc = DateTime.UtcNow;
+                SaveConfig();
+                PushAfterLocalChange();
+            }
+
             if (r.NoMonitors)
             {
                 Tray.ShowBalloonTip(3000, "Monitor Switch",
@@ -341,6 +350,48 @@ namespace MonitorSwitch
             for (int i = 0; i < vals.Count; i++)
                 parts.Add("Mon " + i + " = " + FriendlyInput((int)vals[i].Value));
             return string.Join(", ", parts);
+        }
+
+        // ----- learned monitor matches ----------------------------------------
+        // The app deduces that two different hardware ids are the same physical
+        // screen (see Ddc.LearnAliases). Those deductions are only ever
+        // inferences, so the user must be able to throw them away.
+
+        public static int LearnedMatchCount()
+        {
+            return CountAliases(ProfileA) + CountAliases(ProfileB);
+        }
+
+        static int CountAliases(Profile p)
+        {
+            int n = 0;
+            if (p != null && p.Inputs != null)
+                foreach (var e in p.Inputs)
+                    if (e.Aliases != null) n += e.Aliases.Count;
+            return n;
+        }
+
+        // Drops every learned match and syncs that decision to the other PCs
+        // (otherwise they would just push the old ones back). Safe: the app
+        // re-learns from scratch on the next switch. Returns how many went.
+        public static int ForgetLearnedMatches()
+        {
+            int removed = ClearAliases(ProfileA) + ClearAliases(ProfileB);
+            if (removed > 0)
+            {
+                SaveConfig();
+                PushAfterLocalChange();
+            }
+            return removed;
+        }
+
+        static int ClearAliases(Profile p)
+        {
+            int n = CountAliases(p);
+            if (n == 0) return 0;
+            foreach (var e in p.Inputs) e.Aliases = null;
+            p.UpdatedAtUtc = DateTime.UtcNow;   // a real content change; must win the merge
+            return n;
         }
 
         public static bool SaveConfig()

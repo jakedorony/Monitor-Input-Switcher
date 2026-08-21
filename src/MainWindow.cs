@@ -27,7 +27,7 @@ namespace MonitorSwitch
             form.FormBorderStyle = FormBorderStyle.FixedSingle;
             form.MaximizeBox = false;
             form.StartPosition = FormStartPosition.CenterScreen;
-            form.ClientSize = new Size(484, 600);
+            form.ClientSize = new Size(484, 700);
             form.Icon = TrayApp.AppIcon(32);
 
             // --- Monitors right now ---
@@ -71,6 +71,31 @@ namespace MonitorSwitch
                 valueLabels[g] = valLbl;
             }
 
+            // --- Monitor matching (learned aliases) ---
+            var gbMatch = new GroupBox();
+            gbMatch.Text = "Monitor matching";
+            gbMatch.SetBounds(12, 516, 460, 104);
+
+            var lblMatchInfo = new Label();
+            lblMatchInfo.AutoSize = false;
+            lblMatchInfo.SetBounds(12, 20, 434, 46);
+            lblMatchInfo.Text =
+                "Some monitors identify themselves differently on each computer, " +
+                "so the app works out which ones are the same and remembers it. " +
+                "If a profile ever switches the wrong monitor, clear what it " +
+                "learned and switch again.";
+            gbMatch.Controls.Add(lblMatchInfo);
+
+            var btnForget = new Button();
+            btnForget.Text = "Clear learned matches";
+            btnForget.SetBounds(12, 68, 160, 26);
+            gbMatch.Controls.Add(btnForget);
+
+            var lblLearned = new Label();
+            lblLearned.AutoSize = false;
+            lblLearned.SetBounds(182, 72, 264, 22);
+            gbMatch.Controls.Add(lblLearned);
+
             // --- Refresh logic shared by everything below ---
             Action refreshUi = delegate
             {
@@ -96,6 +121,10 @@ namespace MonitorSwitch
                 nameLabels[1].Text = TrayApp.ProfileB.Name;
                 valueLabels[0].Text = TrayApp.DescribeProfile(TrayApp.ProfileA);
                 valueLabels[1].Text = TrayApp.DescribeProfile(TrayApp.ProfileB);
+                int learned = TrayApp.LearnedMatchCount();
+                lblLearned.Text = learned == 0
+                    ? "Nothing learned yet."
+                    : learned + " learned match" + (learned == 1 ? "" : "es") + " remembered.";
             };
 
             btnRefresh.Click += delegate { refreshUi(); };
@@ -296,10 +325,19 @@ namespace MonitorSwitch
             TrayApp.SyncStateChanged += syncChangedHandler;
             form.FormClosed += delegate { TrayApp.SyncStateChanged -= syncChangedHandler; };
 
+            btnForget.Click += delegate
+            {
+                int removed = TrayApp.ForgetLearnedMatches();
+                refreshUi();   // repaints the count line; the confirmation goes on top
+                lblLearned.Text = removed == 0
+                    ? "There was nothing learned to clear."
+                    : "Cleared " + removed + " learned match" + (removed == 1 ? "" : "es") + ".";
+            };
+
             // --- Bottom row: toggle, startup, help, close ---
             var btnToggle = new Button();
             btnToggle.Text = "Switch (toggle A / B)";
-            btnToggle.SetBounds(12, 520, 168, 32);
+            btnToggle.SetBounds(12, 624, 168, 32);
             btnToggle.Click += delegate
             {
                 TrayApp.ToggleProfiles();
@@ -308,7 +346,7 @@ namespace MonitorSwitch
 
             var chkStartup = new CheckBox();
             chkStartup.Text = "Start automatically when I sign in";
-            chkStartup.SetBounds(14, 560, 260, 24);
+            chkStartup.SetBounds(14, 664, 260, 24);
             chkStartup.Checked = TrayApp.GetStartupEnabled();
             bool startupGuard = false;
             chkStartup.CheckedChanged += delegate
@@ -327,18 +365,19 @@ namespace MonitorSwitch
 
             var btnHelp = new Button();
             btnHelp.Text = "How to use...";
-            btnHelp.SetBounds(280, 520, 100, 32);
+            btnHelp.SetBounds(280, 624, 100, 32);
             btnHelp.Click += delegate { HelpWindow.ShowHelp(); };
 
             var btnClose = new Button();
             btnClose.Text = "Close";
-            btnClose.SetBounds(388, 520, 84, 32);
+            btnClose.SetBounds(388, 624, 84, 32);
             btnClose.Click += delegate { form.Close(); };
 
             form.Controls.Add(gbStatus);
             form.Controls.Add(groups[0]);
             form.Controls.Add(groups[1]);
             form.Controls.Add(gbSync);
+            form.Controls.Add(gbMatch);
             form.Controls.Add(btnToggle);
             form.Controls.Add(chkStartup);
             form.Controls.Add(btnHelp);

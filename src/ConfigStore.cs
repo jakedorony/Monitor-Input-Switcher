@@ -23,6 +23,7 @@ namespace MonitorSwitch
         {
             public string Monitor { get; set; }
             public uint Value { get; set; }
+            public List<string> Aliases { get; set; }   // omitted when empty
         }
 
         class ProfileDto
@@ -118,7 +119,13 @@ namespace MonitorSwitch
         {
             var inputs = new List<InputDto>();
             foreach (var e in p.Inputs)
-                inputs.Add(new InputDto { Monitor = e.MonitorId, Value = e.Value });
+                inputs.Add(new InputDto
+                {
+                    Monitor = e.MonitorId,
+                    Value = e.Value,
+                    Aliases = (e.Aliases != null && e.Aliases.Count > 0)
+                        ? new List<string>(e.Aliases) : null
+                });
             return new ProfileDto
             {
                 Name = p.Name,
@@ -134,7 +141,12 @@ namespace MonitorSwitch
             if (d.Inputs != null)
             {
                 foreach (var e in d.Inputs)
-                    p.Inputs.Add(new InputSetting(e.Monitor, e.Value));
+                {
+                    var entry = new InputSetting(e.Monitor, e.Value);
+                    if (e.Aliases != null && e.Aliases.Count > 0)
+                        entry.Aliases = new List<string>(e.Aliases);
+                    p.Inputs.Add(entry);
+                }
             }
             else if (d.Values != null)
             {

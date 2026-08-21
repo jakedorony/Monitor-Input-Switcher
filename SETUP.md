@@ -141,9 +141,12 @@ If you have two PCs, install it on both.
   read it. The folder is intentionally left in place if you uninstall —
   delete it by hand if you want a fully clean removal.
 - Profiles remember monitors by their **hardware ID**, so driver updates or
-  re-ordered monitor lists don't break them. The one exception: two monitors
-  of the *identical model* can't be told apart perfectly across different
-  PCs — if inputs ever land on the wrong twin, just re-save the profile.
+  re-ordered monitor lists don't break them. Some monitors report a slightly
+  different ID to each computer; the app works out which screens are the same
+  and remembers it. If a profile ever sends a monitor to the wrong input
+  (typically after moving cables or swapping a monitor), open the main window
+  and click **Clear learned matches** under *Monitor matching*, then switch
+  again — your profiles themselves are untouched.
 - To make the app stop starting at sign-in without uninstalling: re-run the
   installer and untick the startup option, or remove the "MonitorSwitch" entry
   under Task Manager → Startup apps.

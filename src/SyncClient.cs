@@ -84,6 +84,9 @@ namespace MonitorSwitch
         {
             [JsonPropertyName("monitor")] public string Monitor { get; set; }
             [JsonPropertyName("value")] public uint Value { get; set; }
+            // Additive and optional: clients older than 2.3 ignore this key,
+            // and rows written by them simply carry no aliases.
+            [JsonPropertyName("aliases")] public List<string> Aliases { get; set; }
         }
 
         class RowDto
@@ -202,7 +205,12 @@ namespace MonitorSwitch
                     var inputs = new List<InputSetting>();
                     if (r.Inputs != null)
                         foreach (var e in r.Inputs)
-                            inputs.Add(new InputSetting(e.Monitor, e.Value));
+                        {
+                            var entry = new InputSetting(e.Monitor, e.Value);
+                            if (e.Aliases != null && e.Aliases.Count > 0)
+                                entry.Aliases = new List<string>(e.Aliases);
+                            inputs.Add(entry);
+                        }
                     result.Add(new ProfileRow
                     {
                         Slot = r.Slot,
@@ -225,7 +233,13 @@ namespace MonitorSwitch
             {
                 var inputs = new List<WireInputDto>();
                 foreach (var e in r.Inputs)
-                    inputs.Add(new WireInputDto { Monitor = e.MonitorId, Value = e.Value });
+                    inputs.Add(new WireInputDto
+                    {
+                        Monitor = e.MonitorId,
+                        Value = e.Value,
+                        Aliases = (e.Aliases != null && e.Aliases.Count > 0)
+                            ? new List<string>(e.Aliases) : null
+                    });
                 dtos.Add(new RowDto
                 {
                     Slot = r.Slot,
@@ -239,8 +253,12 @@ namespace MonitorSwitch
             {
                 req.Headers.Add("Authorization", "Bearer " + token);
                 req.Headers.Add("Prefer", "resolution=merge-duplicates,return=minimal");
+                var opts = new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
                 req.Content = new StringContent(
-                    JsonSerializer.Serialize(dtos), Encoding.UTF8, "application/json");
+                    JsonSerializer.Serialize(dtos, opts), Encoding.UTF8, "application/json");
                 await SendAsync(req);
             }
         }

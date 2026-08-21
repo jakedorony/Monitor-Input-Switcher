@@ -68,6 +68,21 @@ namespace MonitorSwitch
 "still works fine without an account - syncing is optional.\r\n" +
 "\r\n" +
 "-----------------------------------------------------------\r\n" +
+"IF A MONITOR GOES TO THE WRONG INPUT\r\n" +
+"-----------------------------------------------------------\r\n" +
+"Some monitors give each computer a slightly different name\r\n" +
+"for themselves. When that happens the app works out which\r\n" +
+"screens are the same one and remembers it, so your profiles\r\n" +
+"keep working on every computer.\r\n" +
+"\r\n" +
+"Rarely it can get that wrong - usually after you move cables\r\n" +
+"between ports, or plug in a different monitor. If a profile\r\n" +
+"starts sending a monitor to the wrong input, open the main\r\n" +
+"window, find \"Monitor matching\" and click \"Clear learned\r\n" +
+"matches\". The app forgets what it worked out and starts\r\n" +
+"again next time you switch. Your profiles are not affected.\r\n" +
+"\r\n" +
+"-----------------------------------------------------------\r\n" +
 "IF SOMETHING DOESN'T WORK\r\n" +
 "-----------------------------------------------------------\r\n" +
 "  - A monitor switches to the wrong input, or a popup says it\r\n" +

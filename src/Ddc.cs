@@ -92,6 +92,17 @@ namespace MonitorSwitch
                 Native.DestroyPhysicalMonitor(m.Handle);
         }
 
+        public enum MatchKind { None, Id, Alias, Positional, Paired }
+
+        // Which saved entry drives one connected monitor, and how it was found.
+        public class MonitorMatch
+        {
+            public int EntryIndex = -1;
+            public MatchKind Kind = MatchKind.None;
+            public uint Value;
+            public bool Has { get { return Kind != MatchKind.None; } }
+        }
+
         // Result of applying a profile, detailed enough to tell the user the
         // truth (a monitor we could not match is NOT a success).
         public class ApplyOutcome
@@ -101,61 +112,101 @@ namespace MonitorSwitch
             public int Failures;        // SetVCPFeature rejected the write
             public int Unmatched;       // connected monitors with nothing to apply
             public int Paired;          // matched by leftover pairing, not by id
+            public int Learned;         // aliases recorded on this run
         }
 
-        // Decides which saved input goes to which connected monitor.
+        // Pure. Decides which saved input drives each connected monitor, in
+        // descending order of confidence:
+        //   1. exact primary id          - the normal path
+        //   2. learned alias             - same panel, different id on this PC
+        //   3. legacy positional entries - v1.x/v2.0 data with no id
+        //   4. leftover pairing          - whatever is still unclaimed, in order
         //
-        // 1. Exact hardware-id match - the normal path.
-        // 2. Legacy positional entries (MonitorId null) by position.
-        // 3. Leftover pairing: any monitor still unmatched takes the next
-        //    unused entry, in order.
-        //
-        // Step 3 exists because a monitor's PnP id is NOT always stable across
-        // PCs: the same Dell panel reports DELA07A on one machine and DELA07B
-        // on another. Without it that monitor silently never switches on the
-        // second PC. Pairing only ever consumes entries no monitor claimed by
-        // id, so exact matches always win.
-        public static void Plan(Profile p, List<PhysMon> mons,
-            out uint[] values, out bool[] hasValue, out int paired, out int unmatched)
+        // Tiers 2 and 4 exist because a monitor's PnP id is not guaranteed
+        // stable across PCs: one Dell panel reports DELA07A on one machine and
+        // DELA07B on another. Pairing only ever consumes entries no monitor
+        // claimed by id or alias, so exact matches always win.
+        public static MonitorMatch[] Plan(Profile p, List<PhysMon> mons)
         {
-            values = new uint[mons.Count];
-            hasValue = new bool[mons.Count];
+            var result = new MonitorMatch[mons.Count];
+            for (int i = 0; i < mons.Count; i++) result[i] = new MonitorMatch();
             var entryUsed = new bool[p.Inputs.Count];
-            paired = 0;
-            unmatched = 0;
 
-            for (int i = 0; i < mons.Count; i++)
-            {
-                if (mons[i].Id.Length == 0) continue;
-                for (int e = 0; e < p.Inputs.Count; e++)
-                {
-                    if (entryUsed[e] || p.Inputs[e].MonitorId != mons[i].Id) continue;
-                    values[i] = p.Inputs[e].Value;
-                    hasValue[i] = true;
-                    entryUsed[e] = true;
-                    break;
-                }
-            }
+            // Primary ids are resolved for ALL monitors before aliases get a
+            // look-in, so an alias can never steal an entry from an exact match.
+            MatchPass(p, mons, result, entryUsed, false);
+            MatchPass(p, mons, result, entryUsed, true);
 
             for (int i = 0; i < mons.Count && i < p.Inputs.Count; i++)
             {
-                if (hasValue[i] || entryUsed[i] || p.Inputs[i].MonitorId != null) continue;
-                values[i] = p.Inputs[i].Value;
-                hasValue[i] = true;
-                entryUsed[i] = true;
+                if (result[i].Has || entryUsed[i] || p.Inputs[i].MonitorId != null) continue;
+                Take(result[i], p, i, entryUsed, MatchKind.Positional);
             }
 
             int next = 0;
             for (int i = 0; i < mons.Count; i++)
             {
-                if (hasValue[i]) continue;
+                if (result[i].Has) continue;
                 while (next < p.Inputs.Count && entryUsed[next]) next++;
-                if (next >= p.Inputs.Count) { unmatched++; continue; }
-                values[i] = p.Inputs[next].Value;
-                hasValue[i] = true;
-                entryUsed[next] = true;
-                paired++;
+                if (next >= p.Inputs.Count) continue;   // nothing left; stays unmatched
+                Take(result[i], p, next, entryUsed, MatchKind.Paired);
             }
+            return result;
+        }
+
+        static void MatchPass(Profile p, List<PhysMon> mons, MonitorMatch[] result,
+            bool[] entryUsed, bool allowAlias)
+        {
+            for (int i = 0; i < mons.Count; i++)
+            {
+                if (result[i].Has || mons[i].Id.Length == 0) continue;
+                for (int e = 0; e < p.Inputs.Count; e++)
+                {
+                    if (entryUsed[e]) continue;
+                    bool hit = allowAlias
+                        ? p.Inputs[e].Matches(mons[i].Id)
+                        : p.Inputs[e].MonitorId == mons[i].Id;
+                    if (!hit) continue;
+                    Take(result[i], p, e, entryUsed,
+                        allowAlias ? MatchKind.Alias : MatchKind.Id);
+                    break;
+                }
+            }
+        }
+
+        static void Take(MonitorMatch m, Profile p, int e, bool[] entryUsed, MatchKind kind)
+        {
+            m.EntryIndex = e;
+            m.Kind = kind;
+            m.Value = p.Inputs[e].Value;
+            entryUsed[e] = true;
+        }
+
+        // Turns a guess into knowledge. A leftover pairing is only trustworthy
+        // when it was FORCED - exactly one monitor and one entry left over, so
+        // no other assignment was possible. Then the entry's id and the
+        // monitor's id provably name the same physical panel, and recording the
+        // alias means every later switch matches exactly instead of by order.
+        // With two or more leftovers the order could be wrong, so learn nothing.
+        // Returns the number of aliases added (0 or 1).
+        public static int LearnAliases(Profile p, List<PhysMon> mons, MonitorMatch[] plan)
+        {
+            int idx = -1, count = 0;
+            for (int i = 0; i < plan.Length; i++)
+            {
+                // A positional match is itself a guess (it assumes enumeration
+                // order never changed). Deducing an alias from a plan that
+                // leans on one would promote that guess to permanent, synced
+                // fact - so learn only from plans built purely on exact ids.
+                if (plan[i].Kind == MatchKind.Positional) return 0;
+                if (plan[i].Kind == MatchKind.Paired) { count++; idx = i; }
+            }
+            if (count != 1) return 0;
+            if (mons[idx].Id.Length == 0) return 0;
+
+            var entry = p.Inputs[plan[idx].EntryIndex];
+            if (entry.MonitorId == null) return 0;   // legacy entry: id is filled in elsewhere
+            return entry.AddAlias(mons[idx].Id) ? 1 : 0;
         }
 
         public static ApplyOutcome ApplyProfile(Profile p)
@@ -166,19 +217,17 @@ namespace MonitorSwitch
             {
                 if (monitors.Count == 0) { outcome.NoMonitors = true; return outcome; }
 
-                uint[] values; bool[] hasValue; int paired, unmatched;
-                Plan(p, monitors, out values, out hasValue, out paired, out unmatched);
-                outcome.Paired = paired;
-                outcome.Unmatched = unmatched;
-
+                MonitorMatch[] plan = Plan(p, monitors);
                 for (int i = 0; i < monitors.Count; i++)
                 {
-                    if (!hasValue[i]) continue;
-                    if (Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, values[i]))
+                    if (!plan[i].Has) { outcome.Unmatched++; continue; }
+                    if (plan[i].Kind == MatchKind.Paired) outcome.Paired++;
+                    if (Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, plan[i].Value))
                         outcome.Applied++;
                     else
                         outcome.Failures++;
                 }
+                outcome.Learned = LearnAliases(p, monitors, plan);
             }
             finally { Release(monitors); }
             return outcome;
