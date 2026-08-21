@@ -209,6 +209,22 @@ namespace MonitorSwitch
             return entry.AddAlias(mons[idx].Id) ? 1 : 0;
         }
 
+        // How many of the live monitors already show the input this profile
+        // would give them. Uses the same matching as ApplyProfile, so "on this
+        // profile" means exactly what switching to it would (not) change.
+        // Unreadable monitors (-1) never count.
+        public static int CountOnProfile(Profile p, List<MonitorInput> live)
+        {
+            if (p == null || p.Inputs == null || live == null || live.Count == 0) return 0;
+            var mons = new List<PhysMon>();
+            foreach (var m in live) mons.Add(new PhysMon { Id = m.Id ?? "", Description = "" });
+            MonitorMatch[] plan = Plan(p, mons);
+            int n = 0;
+            for (int i = 0; i < live.Count; i++)
+                if (plan[i].Has && live[i].Value >= 0 && (uint)live[i].Value == plan[i].Value) n++;
+            return n;
+        }
+
         public static ApplyOutcome ApplyProfile(Profile p)
         {
             var outcome = new ApplyOutcome();

@@ -151,8 +151,14 @@ models across PCs remains an accepted ambiguity.
 - Deleting a profile resets the slot to "(not set)", persists as an empty
   value list (and syncs that way); the menu button remains and warns if
   clicked.
-- Double-click on tray icon opens the main window (NOT toggle);
-  `ToggleProfiles` prefers a saved slot if the natural target is empty.
+- Double-click on tray icon opens the main window (NOT toggle).
+- `ToggleProfiles` is STATE-based: `PickToggleTarget` reads the live inputs,
+  counts how many monitors already sit on each profile (`Ddc.CountOnProfile`,
+  same matching as apply) and goes to the one they're NOT on. The last
+  applied slot (`lastSlot`, a char - never a Profile reference, sync replaces
+  those objects) is only a tie-break. The old memory-only toggle defaulted to
+  Profile A after every restart/sync, which looked like "toggle only switches
+  one monitor". An unset slot is never the target while the other is saved.
 - Friendly input names via `FriendlyInput` (MCCS: 1/2 VGA, 3/4 DVI, 15/16 DP,
   17/18 HDMI; fallback "Input N").
 - Uninstall leaves `%APPDATA%\MonitorSwitch` in place (user data).

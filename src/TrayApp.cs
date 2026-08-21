@@ -15,7 +15,10 @@ namespace MonitorSwitch
     {
         public static Profile ProfileA = new Profile("Personal PC (Display Port)", 15, 15);
         public static Profile ProfileB = new Profile("Work PC (DVI/HDMI)", 3, 17);
-        static Profile lastProfile;
+        // Slot of the profile applied most recently ('A', 'B', or '\0'). Kept as
+        // a slot, not a Profile reference: sync replaces the Profile objects, and
+        // a stale reference made the toggle always pick A.
+        static char lastSlot = '\0';
 
         public static NotifyIcon Tray;
         static ToolStripItem itemA;
@@ -132,10 +135,25 @@ namespace MonitorSwitch
         // profile is saved, switch to the saved one instead of nagging.
         public static void ToggleProfiles()
         {
-            Profile next = (lastProfile == ProfileA) ? ProfileB : ProfileA;
-            Profile other = (next == ProfileA) ? ProfileB : ProfileA;
-            if (!IsSet(next) && IsSet(other)) next = other;
-            Apply(next);
+            Apply(PickToggleTarget(ProfileA, ProfileB, Ddc.ReadInputs(), lastSlot));
+        }
+
+        // Chooses the toggle target from what the monitors show RIGHT NOW: go to
+        // whichever profile they are not on. Memory of the last switch is only a
+        // tie-break (nothing readable, or a genuinely 50/50 mixed state). Pure,
+        // so it can be tested without hardware.
+        public static Profile PickToggleTarget(Profile a, Profile b,
+            List<MonitorInput> live, char last)
+        {
+            bool aSet = IsSet(a), bSet = IsSet(b);
+            if (aSet != bSet) return aSet ? a : b;       // only one is usable
+            if (!aSet) return a;                          // neither; Apply warns
+
+            int onA = Ddc.CountOnProfile(a, live);
+            int onB = Ddc.CountOnProfile(b, live);
+            if (onA != onB) return onA > onB ? b : a;    // leave the one we're on
+
+            return last == 'A' ? b : a;                   // tie: alternate
         }
 
         // Human-readable label for a VCP 0x60 input value (MCCS standard).
@@ -221,7 +239,7 @@ namespace MonitorSwitch
                 return;
             }
             Ddc.ApplyOutcome r = Ddc.ApplyProfile(p);
-            lastProfile = p;
+            lastSlot = (p == ProfileA) ? 'A' : (p == ProfileB) ? 'B' : lastSlot;
 
             // Applying can teach us that two ids are the same panel. That is a
             // real content change, so persist it and let the other PCs have it.
@@ -331,7 +349,7 @@ namespace MonitorSwitch
             empty.UpdatedAtUtc = DateTime.UtcNow;
             if (slot == 'A') { ProfileA = empty; itemA.Text = empty.Name; }
             else             { ProfileB = empty; itemB.Text = empty.Name; }
-            if (lastProfile == target) lastProfile = null;
+            if (lastSlot == slot) lastSlot = '\0';
 
             if (SaveConfig())
                 Tray.ShowBalloonTip(2000, "Monitor Switch",
