@@ -49,7 +49,17 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
    `[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]` (dxva2.dll
    especially; this blocks planting attacks). Any new P/Invoke to a
    non-KnownDLL must get the same attribute.
-4. **Sync must stay optional.** Every DDC/profile feature works signed-out and
+4. **Everything that arrives from config.json or the cloud goes through
+   `Limits.Apply`** (src/Profile.cs): name ≤ 80 chars, ids `[A-Za-z0-9#_-]`
+   ≤ 32, ≤ 16 entries, ≤ 16 aliases, input values ≤ 255. `MonitorNames`
+   refuses anything `Limits.Id` rejects before touching the registry. A new
+   ingest path must call it too.
+5. **Supabase grants are minimal.** `anon` has no table privileges at all;
+   `authenticated` has only SELECT/INSERT/UPDATE/DELETE (RLS does not cover
+   TRUNCATE). Default privileges for new public tables revoke `anon`.
+6. **CI actions are pinned to commit SHAs** with the tag in a comment; bump
+   deliberately, never back to a floating `@v4`. build.yml is read-only.
+7. **Sync must stay optional.** Every DDC/profile feature works signed-out and
    offline; network failures degrade to warning balloons, never dialogs or
    blocked UI.
 

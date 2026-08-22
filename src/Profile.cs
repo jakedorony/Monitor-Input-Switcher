@@ -53,6 +53,71 @@ namespace MonitorSwitch
         }
     }
 
+    // Bounds for anything that arrives from config.json or the cloud. The
+    // data is the user's own, but a stolen session or a bad actor with DB
+    // access must not be able to push megabytes of names or odd ids into
+    // the tray menu, the UI, or SetVCPFeature.
+    static class Limits
+    {
+        public const int NameChars = 80;
+        public const int IdChars = 32;
+        public const int Entries = 16;
+        public const int Aliases = 16;
+        public const uint MaxInput = 255;      // VCP 0x60 values are one byte
+
+        public static string Name(string s)
+        {
+            if (s == null) return null;
+            s = s.Trim();
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+                if (!char.IsControl(c)) sb.Append(c);
+            s = sb.ToString();
+            return s.Length > NameChars ? s.Substring(0, NameChars) : s;
+        }
+
+        // Hardware ids are "DELA07B", optionally "#2"-suffixed. Anything else
+        // (path separators, control chars, oversize) becomes null = unknown.
+        public static string Id(string s)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length > IdChars) return null;
+            foreach (char c in s)
+                if (!(char.IsLetterOrDigit(c) || c == '#' || c == '_' || c == '-')) return null;
+            return s;
+        }
+
+        public static uint Input(uint v) { return v > MaxInput ? 0 : v; }
+
+        // Drops invalid entries, clamps counts, dedupes aliases.
+        public static void Apply(Profile p)
+        {
+            if (p == null) return;
+            p.Name = Name(p.Name) ?? "";
+            if (p.Inputs == null) { p.Inputs = new List<InputSetting>(); return; }
+            var kept = new List<InputSetting>();
+            foreach (var e in p.Inputs)
+            {
+                if (e == null) continue;
+                if (e.MonitorId != null) { e.MonitorId = Id(e.MonitorId); if (e.MonitorId == null) continue; }
+                e.Value = Input(e.Value);
+                if (e.Aliases != null)
+                {
+                    var al = new List<string>();
+                    foreach (var a in e.Aliases)
+                    {
+                        string ok = Id(a);
+                        if (ok != null && ok != e.MonitorId && !al.Contains(ok)) al.Add(ok);
+                        if (al.Count >= Aliases) break;
+                    }
+                    e.Aliases = al.Count > 0 ? al : null;
+                }
+                kept.Add(e);
+                if (kept.Count >= Entries) break;
+            }
+            p.Inputs = kept;
+        }
+    }
+
     class Profile
     {
         public string Name;

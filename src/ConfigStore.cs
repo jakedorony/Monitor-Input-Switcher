@@ -161,6 +161,7 @@ namespace MonitorSwitch
                     p.Inputs.Add(new InputSetting(null, v));
             }
             p.UpdatedAtUtc = DateTime.SpecifyKind(d.UpdatedAtUtc, DateTimeKind.Utc);
+            Limits.Apply(p);
             return p;
         }
 

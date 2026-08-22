@@ -211,11 +211,15 @@ namespace MonitorSwitch
                                 entry.Aliases = new List<string>(e.Aliases);
                             inputs.Add(entry);
                         }
+                    if (r.Slot != "A" && r.Slot != "B") continue;      // unknown slot: ignore
+                    var clamped = new Profile(Limits.Name(r.Name) ?? "");
+                    clamped.Inputs = inputs;
+                    Limits.Apply(clamped);
                     result.Add(new ProfileRow
                     {
                         Slot = r.Slot,
-                        Name = r.Name,
-                        Inputs = inputs,
+                        Name = clamped.Name,
+                        Inputs = clamped.Inputs,
                         UpdatedAtUtc = r.UpdatedAt.UtcDateTime
                     });
                 }

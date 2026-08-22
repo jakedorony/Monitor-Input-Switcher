@@ -618,7 +618,7 @@ namespace MonitorSwitch
 
             if (r != null && r.UpdatedAtUtc > local.UpdatedAtUtc + SyncSlack)
             {
-                var p = new Profile(r.Name);
+                var p = new Profile(string.IsNullOrEmpty(r.Name) ? "Profile " + slot : r.Name);
                 p.Inputs = new List<InputSetting>(r.Inputs);
                 p.UpdatedAtUtc = r.UpdatedAtUtc;
                 local = p;

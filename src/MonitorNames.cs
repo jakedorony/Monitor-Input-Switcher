@@ -38,6 +38,9 @@ namespace MonitorSwitch
             if (hash > 0) { baseId = monitorId.Substring(0, hash); suffix = " (" + monitorId.Substring(hash + 1) + ")"; }
 
             string name;
+            // Ids come from the OS today, but this is the one place a string
+            // becomes a registry path - keep it safe by construction.
+            if (Limits.Id(baseId) == null) return monitorId;
             lock (cache)
             {
                 if (!cache.TryGetValue(baseId, out name))
