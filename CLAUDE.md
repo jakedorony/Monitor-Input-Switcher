@@ -79,9 +79,12 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   src/SyncClient.cs. The publishable key is safe to embed; **RLS is the
   security boundary** — every policy on `public.shared_profiles` requires
   `user_id = auth.uid()`. Schema changes go through Supabase migrations AND
-  the wire DTOs in SyncClient.cs together. (An empty superseded
-  `public.profiles` table from v2.0 still exists; safe to drop from the
-  dashboard.)
+  the wire DTOs in SyncClient.cs together. `shared_profiles` is the only
+  table (the v2.0 per-machine `profiles` table was dropped 2026-08-22).
+  Auth settings (dashboard): email confirmation ON, minimum password length
+  8 with complexity. **Do not enable CAPTCHA on Supabase Auth** — the
+  WinForms client has no browser surface to render hCaptcha/Turnstile, so
+  it would break sign-up and sign-in; use rate limits for abuse control.
 
 ## Architecture (src/)
 
