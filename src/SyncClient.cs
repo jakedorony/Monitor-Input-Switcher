@@ -267,6 +267,17 @@ namespace MonitorSwitch
             }
         }
 
+        // Deletes the signed-in account on the server (public.delete_own_account,
+        // a security-definer function that only touches auth.uid()), which
+        // cascades to the account's profile rows. Local sign-in state is cleared
+        // afterwards; local profiles are untouched - they are the user's data.
+        public static async Task DeleteAccountAsync()
+        {
+            string token = await EnsureAccessTokenAsync();
+            await PostAsync(SupabaseUrl + "/rest/v1/rpc/delete_own_account", "{}", token);
+            SignOut();
+        }
+
         // ----- plumbing -------------------------------------------------------
 
         static async Task<string> PostAsync(string url, string jsonBody, string bearer)

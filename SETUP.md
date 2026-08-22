@@ -102,7 +102,9 @@ signed-in computer gets them automatically. That's the whole idea — each
 computer can send the monitors over to the other one, and the app remembers
 which physical monitor gets which input (it identifies monitors by their
 hardware ID, so it doesn't matter if your computers list them in a different
-order). Everything works fine without an account — syncing is optional.
+order). Everything works fine without an account — syncing is optional, and you can
+delete the account (and everything it stored online) from **Settings → Account
+& sync → Delete my account** whenever you like.
 
 ---
 

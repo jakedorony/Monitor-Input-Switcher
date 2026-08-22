@@ -36,6 +36,14 @@ Double-click the tray icon for the main window with live input status, and
 the optional sync account. Full guide: right-click → *How to use...*, or see
 [SETUP.md](SETUP.md).
 
+## Privacy
+
+The optional account stores only your email and your two profiles (monitor
+ids and input numbers). You can delete it at any time from inside the app:
+**Settings → Account & sync → Delete my account**. That removes the account
+and everything it stored online immediately; the profiles on your PC are
+kept.
+
 ## Requirements
 
 - Windows 10/11

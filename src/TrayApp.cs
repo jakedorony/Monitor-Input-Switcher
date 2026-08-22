@@ -556,6 +556,18 @@ namespace MonitorSwitch
             return ok;
         }
 
+        // Deletes the cloud account. Throws SyncException with a showable
+        // message; on success the app is signed out and the UI repaints.
+        public static async Task DeleteAccountAsync()
+        {
+            await SyncClient.DeleteAccountAsync();
+            LastSyncUtc = DateTime.MinValue;
+            RaiseSyncStateChanged();
+            Tray.ShowBalloonTip(3000, "Monitor Switch",
+                "Your account and its cloud data were deleted. Profiles on this PC are kept.",
+                ToolTipIcon.Info);
+        }
+
         public static void SetTheme(ThemeMode mode)
         {
             ConfigStore.Theme = mode.ToString();

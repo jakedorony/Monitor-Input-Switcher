@@ -87,6 +87,10 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   8 with complexity. **Do not enable CAPTCHA on Supabase Auth** — the
   WinForms client has no browser surface to render hCaptcha/Turnstile, so
   it would break sign-up and sign-in; use rate limits for abuse control.
+  Account deletion = `public.delete_own_account()` (security definer,
+  execute granted to `authenticated` only, deletes `auth.uid()`; cascades
+  to shared_profiles) called via PostgREST RPC from
+  `SyncClient.DeleteAccountAsync`. Local profiles are deliberately kept.
 
 ## Architecture (src/)
 

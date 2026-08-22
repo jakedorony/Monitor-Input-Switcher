@@ -198,6 +198,37 @@ namespace MonitorSwitch
                 }));
                 row.Controls.Add(Button("Sign out", false, delegate { SyncClient.SignOut(); status = ""; Build(); }));
                 col.Controls.Add(row);
+
+                var danger = new LinkAction
+                {
+                    Text = "Delete my account...", Font = Theme.Small, TextColor = P.Muted,
+                    Margin = new Padding(0, L(12), 0, 0)
+                };
+                danger.FitToText();
+                danger.Click += async delegate
+                {
+                    var answer = MessageBox.Show(this,
+                        "Delete the account " + SyncClient.Email + " and everything it stores online?" + Environment.NewLine + Environment.NewLine +
+                        "Your profiles stay on this PC, but they will no longer sync, and other " +
+                        "computers signed in to this account will lose the cloud copy." + Environment.NewLine + Environment.NewLine +
+                        "This cannot be undone.",
+                        "Delete account", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2);
+                    if (answer != DialogResult.Yes) return;
+                    danger.Enabled = false; SetStatus("Deleting account...");
+                    try
+                    {
+                        await TrayApp.DeleteAccountAsync();
+                        status = "";
+                        Build();
+                    }
+                    catch (SyncException ex)
+                    {
+                        SetStatus("Couldn't delete the account: " + ex.Message);
+                        if (!danger.IsDisposed) danger.Enabled = true;
+                    }
+                };
+                col.Controls.Add(danger);
             }
             else
             {
