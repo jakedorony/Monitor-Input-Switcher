@@ -453,6 +453,20 @@ namespace MonitorSwitch
             get { return selected >= 0 ? items[selected].Value : 0; }
         }
 
+        // Arbitrary value/label pairs (used by the dock section's pickers).
+        public void SetCustomItems(List<Item> list, uint current)
+        {
+            items.Clear();
+            selected = -1;
+            foreach (var it in list)
+            {
+                items.Add(it);
+                if (it.Value == current) selected = items.Count - 1;
+            }
+            if (selected < 0 && items.Count > 0) selected = 0;
+            Invalidate();
+        }
+
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
 

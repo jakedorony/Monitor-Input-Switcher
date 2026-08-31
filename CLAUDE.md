@@ -145,6 +145,20 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   identity is still the PnP id.
 - `UpdateCheck.cs` — daily GitHub Releases check (state in
   `update-check.txt`; notifies once per release, click opens the page).
+- `DockWatch.cs` — dock/KVM button trigger. A hidden `NativeWindow` gets
+  `WM_DEVICECHANGE` (USB interface class); `DockDebounce` (pure, tested by
+  replaying a real captured timeline) turns event bursts into one
+  Departed/Arrived per press; same-direction repeats within 10s are
+  swallowed (resume storms), direction changes never are. Verified on the
+  Plugable TBT4-UD5: its switched hub pair 05E3:0610 + 05E3:0626 departs
+  ~4s after the press and returns first on switch-back.
+- `DockLibrary.cs` — known dock models (signature sets); a match is a
+  labeled suggestion (hub chips are generic parts). `DockWizard.cs` learns
+  any dock by capturing a press-away/press-back round trip. Signatures and
+  the on-departed/on-arrived slots live in config.json (`Dock`,
+  device-local, NEVER synced). Departure actions are always safe (our DDC
+  link is still live); arrival actions are skipped when monitors are
+  already on the target (idempotent if both machines run the app).
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash
   logging to `%APPDATA%\MonitorSwitch\log.txt`).
 - App icon: `MonitorSwitch.ico` doubles as `ApplicationIcon` and an

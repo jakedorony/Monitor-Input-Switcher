@@ -39,6 +39,38 @@ namespace MonitorSwitch
             public ProfileDto ProfileA { get; set; }
             public ProfileDto ProfileB { get; set; }
             public string Theme { get; set; }            // "System" | "Light" | "Dark"; device-local
+            public DockDto Dock { get; set; }            // device-local, never synced
+        }
+
+        public class DockDto
+        {
+            public bool Enabled { get; set; }
+            public List<string> Signatures { get; set; }     // "VVVV:PPPP" hub ids
+            public string OnDeparted { get; set; }           // "A" | "B" | null (off)
+            public string OnArrived { get; set; }
+        }
+
+        // The dock trigger is about THIS machine's cabling; never synced.
+        public static DockDto Dock = new DockDto();
+
+        static void SanitizeDock(DockDto d)
+        {
+            if (d.Signatures == null) d.Signatures = new List<string>();
+            var clean = new List<string>();
+            foreach (string sig in d.Signatures)
+            {
+                if (sig != null && sig.Length == 9 && sig[4] == ':' && clean.Count < 8)
+                {
+                    bool ok = true;
+                    for (int i = 0; i < 9; i++)
+                        if (i != 4 && !Uri.IsHexDigit(sig[i])) { ok = false; break; }
+                    if (ok && !clean.Contains(sig.ToUpperInvariant())) clean.Add(sig.ToUpperInvariant());
+                }
+            }
+            d.Signatures = clean;
+            if (d.OnDeparted != "A" && d.OnDeparted != "B") d.OnDeparted = null;
+            if (d.OnArrived != "A" && d.OnArrived != "B") d.OnArrived = null;
+            if (d.Signatures.Count == 0) d.Enabled = false;
         }
 
         // Device-local settings that ride in config.json next to the profiles.
@@ -73,6 +105,8 @@ namespace MonitorSwitch
                     if (dto != null)
                     {
                         if (!string.IsNullOrEmpty(dto.Theme)) Theme = dto.Theme;
+                        if (dto.Dock != null) Dock = dto.Dock;
+                        SanitizeDock(Dock);
                         var a = FromDto(dto.ProfileA);
                         var b = FromDto(dto.ProfileB);
                         if (a != null) profileA = a;
@@ -105,7 +139,8 @@ namespace MonitorSwitch
                 {
                     ProfileA = ToDto(profileA),
                     ProfileB = ToDto(profileB),
-                    Theme = Theme
+                    Theme = Theme,
+                    Dock = Dock
                 };
                 var opts = new JsonSerializerOptions
                 {

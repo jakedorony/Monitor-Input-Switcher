@@ -106,6 +106,15 @@ order). Everything works fine without an account — syncing is optional, and yo
 delete the account (and everything it stored online) from **Settings → Account
 & sync → Delete my account** whenever you like.
 
+### Optional: let the dock button switch the monitors
+
+If your dock or KVM switch has a button that moves your keyboard and mouse
+between two computers (like the Plugable TBT4-UD5), the app can switch the
+monitors at the same press. Open **Settings → Dock button → Set up dock...**,
+press the dock's button away and back while the app listens, and save. From
+then on, one press moves keyboard, mouse, and monitors together. Each
+computer configures this separately.
+
 ---
 
 ## Part 4 — Optional polish (technical)

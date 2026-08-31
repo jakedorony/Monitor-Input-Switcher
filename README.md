@@ -12,6 +12,10 @@ monitor menus with the little joystick button.
   every PC plugged into the same monitors — each computer can send the
   monitors to the other one. Monitors are matched by hardware ID, so it
   doesn't matter which order your PCs list them in
+- **Dock button integration**: KVM docks (e.g. Plugable TBT4-UD5) that
+  switch your keyboard and mouse with a button can switch the monitors in
+  the same press — the app notices the dock's USB segment moving and
+  follows. A built-in wizard learns any KVM-style dock
 - **No admin rights**, per-user install, works completely offline if you skip
   the account
 

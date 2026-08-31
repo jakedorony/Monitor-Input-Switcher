@@ -42,7 +42,7 @@ namespace MonitorSwitch
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new Size(L(460), L(640));
+            ClientSize = new Size(L(460), L(780));
             Font = Theme.Body;
             DoubleBuffered = true;
 
@@ -87,6 +87,7 @@ namespace MonitorSwitch
                 stack.Controls.Add(Section("Appearance", BuildAppearance()));
                 stack.Controls.Add(Section("Startup", BuildStartup()));
                 stack.Controls.Add(Section("Monitor matching", BuildMatching()));
+                stack.Controls.Add(Section("Dock button", BuildDock()));
                 stack.Controls.Add(Section("Help", BuildHelp()));
                 Controls.Add(stack);
             }
@@ -338,6 +339,95 @@ namespace MonitorSwitch
             row.Controls.Add(info);
             col.Controls.Add(row);
             return col;
+        }
+
+        Control BuildDock()
+        {
+            var col = Col();
+            col.Controls.Add(Note("If your dock or KVM switch has a button that moves your keyboard and mouse to another computer, the app can notice the press and switch the monitors to match."));
+
+            var d = ConfigStore.Dock;
+            if (d.Signatures.Count == 0)
+            {
+                var row0 = Row();
+                row0.Controls.Add(Button("Set up dock...", true, delegate { RunDockWizard(); }));
+                col.Controls.Add(row0);
+                return col;
+            }
+
+            var model = DockLibrary.Match(d.Signatures);
+            string what = model != null ? model.Name : "Custom dock (" + string.Join(", ", d.Signatures) + ")";
+            string seen = DockWatch.LastMatchUtc == DateTime.MinValue
+                ? "" : "  ·  last activity " + DockWatch.LastMatchUtc.ToLocalTime().ToString("t");
+            col.Controls.Add(Note("Watching: " + what + seen));
+
+            var rowEn = Row();
+            var toggle = new ToggleSwitch
+            {
+                On = d.Enabled, Accent = P.Accent, Track = P.Track, Knob = Color.White,
+                Size = new Size(L(34), L(18)), Margin = new Padding(0, L(3), L(10), L(8))
+            };
+            toggle.Toggled += delegate
+            {
+                ConfigStore.Dock.Enabled = toggle.On;
+                TrayApp.SaveConfig();
+                DockWatch.Reconfigure();
+            };
+            rowEn.Controls.Add(toggle);
+            rowEn.Controls.Add(new Label { Text = "Switch monitors when the dock button is pressed", Font = Theme.Body, ForeColor = P.Text, AutoSize = true, Margin = new Padding(0, L(2), 0, 0) });
+            col.Controls.Add(rowEn);
+
+            col.Controls.Add(DockDirectionRow("When the dock leaves this PC", d.OnDeparted,
+                delegate(string v) { ConfigStore.Dock.OnDeparted = v; TrayApp.SaveConfig(); }));
+            col.Controls.Add(DockDirectionRow("When the dock comes back", d.OnArrived,
+                delegate(string v) { ConfigStore.Dock.OnArrived = v; TrayApp.SaveConfig(); }));
+
+            var rowBtn = Row();
+            rowBtn.Controls.Add(Button("Set up again...", false, delegate { RunDockWizard(); }));
+            col.Controls.Add(rowBtn);
+            return col;
+        }
+
+        Control DockDirectionRow(string label, string current, Action<string> save)
+        {
+            var row = Row();
+            row.Controls.Add(new Label
+            {
+                Text = label, Font = Theme.Small, ForeColor = P.Muted, AutoSize = false,
+                Size = new Size(L(190), L(26)), TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 0, L(8), L(6))
+            });
+            var picker = new InputPicker
+            {
+                Fill = P.Field, Border = P.Border, TextColor = P.Text, Muted = P.Muted,
+                MenuBack = P.Card, MenuHover = P.Hover, Accent = P.Accent,
+                Font = Theme.Small, Size = new Size(L(180), L(26)), Margin = new Padding(0, 0, 0, L(6))
+            };
+            var items = new System.Collections.Generic.List<InputPicker.Item>
+            {
+                new InputPicker.Item { Value = 0, Label = "Do nothing" },
+                new InputPicker.Item { Value = 1, Label = "Switch to " + TrayApp.ProfileA.Name },
+                new InputPicker.Item { Value = 2, Label = "Switch to " + TrayApp.ProfileB.Name }
+            };
+            uint cur = current == "A" ? 1u : current == "B" ? 2u : 0u;
+            picker.SetCustomItems(items, cur);
+            picker.ValueChanged += delegate
+            {
+                uint v = picker.SelectedValue2;
+                save(v == 1 ? "A" : v == 2 ? "B" : null);
+            };
+            row.Controls.Add(picker);
+            return row;
+        }
+
+        void RunDockWizard()
+        {
+            using (var w = new DockWizard())
+            {
+                w.ShowDialog(this);
+            }
+            DockWatch.Reconfigure();
+            Build();
         }
 
         Control BuildHelp()

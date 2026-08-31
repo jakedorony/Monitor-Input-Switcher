@@ -127,6 +127,11 @@ namespace MonitorSwitch
             InitSyncAsync();
             CheckForUpdatesAsync();
 
+            // Dock button: monitors follow the KVM switch (see DockWatch.cs).
+            DockWatch.Departed += delegate { DockAction(ConfigStore.Dock.OnDeparted, false); };
+            DockWatch.Arrived += delegate { DockAction(ConfigStore.Dock.OnArrived, true); };
+            DockWatch.Start();
+
             Application.Run();
         }
 
@@ -566,6 +571,24 @@ namespace MonitorSwitch
             Tray.ShowBalloonTip(3000, "Monitor Switch",
                 "Your account and its cloud data were deleted. Profiles on this PC are kept.",
                 ToolTipIcon.Info);
+        }
+
+        // Reaction to the dock's KVM button. Departure is always safe to act
+        // on (our DDC link is still live). Arrival is skipped when the
+        // monitors are already on the target, which both swallows resume
+        // re-enumeration storms and makes it harmless when the machine on
+        // the other side of the dock reacted first.
+        static void DockAction(string slot, bool arriving)
+        {
+            if (!ConfigStore.Dock.Enabled || slot == null) return;
+            Profile p = slot == "A" ? ProfileA : ProfileB;
+            if (!IsSet(p)) return;
+            if (arriving)
+            {
+                var live = Ddc.ReadInputs();
+                if (live.Count > 0 && Ddc.CountOnProfile(p, live) == live.Count) return;
+            }
+            Apply(p);
         }
 
         public static void SetTheme(ThemeMode mode)

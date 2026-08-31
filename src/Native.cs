@@ -137,6 +137,35 @@ namespace MonitorSwitch
         public static extern bool CapabilitiesRequestAndCapabilitiesReply(
             IntPtr hMonitor, System.Text.StringBuilder buffer, uint length);
 
+        // ----- USB device arrival/removal notifications (dock button) ---------
+
+        public const int WM_DEVICECHANGE = 0x0219;
+        public const int DBT_DEVICEARRIVAL = 0x8000;
+        public const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
+        public const int DBT_DEVTYP_DEVICEINTERFACE = 5;
+        public const int DEVICE_NOTIFY_WINDOW_HANDLE = 0;
+
+        public static readonly Guid GUID_DEVINTERFACE_USB_DEVICE =
+            new Guid(0xA5DCBF10, 0x6530, 0x11D2, 0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED);
+
+        // Fixed-size head of DEV_BROADCAST_DEVICEINTERFACE_W; the device path
+        // string follows in memory at offset 28 and is read with Marshal.
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DEV_BROADCAST_DEVICEINTERFACE
+        {
+            public int dbcc_size;
+            public int dbcc_devicetype;
+            public int dbcc_reserved;
+            public Guid dbcc_classguid;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr RegisterDeviceNotificationW(
+            IntPtr hRecipient, ref DEV_BROADCAST_DEVICEINTERFACE filter, int flags);
+
+        [DllImport("user32.dll")]
+        public static extern bool UnregisterDeviceNotification(IntPtr handle);
+
         // ----- Dark title bar (dwmapi is not a KnownDLL - keep the attribute) -----
 
         public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
