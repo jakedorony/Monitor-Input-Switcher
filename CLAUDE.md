@@ -233,3 +233,11 @@ models across PCs remains an accepted ambiguity.
 - Balloon tips may be suppressed by Focus Assist — not a bug.
 - Some monitors report different read vs write values for VCP 0x60 (spec
   allows it) — capture/switch mismatches on exotic hardware are known.
+- Some monitors power their link (and DDC) fully down on inactive inputs:
+  the user's Dell U2412M is unreachable from a PC it isn't showing, while
+  the ASUS PG27AQDM stays commandable. This bounds the dock feature's
+  return direction on a single machine — the arrival retry loop
+  (`TrayApp.DockRetryTick`, ~85s, success = every PROFILE entry home, not
+  every visible monitor) ends with an honest warning balloon. The complete
+  fix is the app on both machines: each machine's dock-DEPARTED direction
+  is always reliable because its links are still live at that moment.

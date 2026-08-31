@@ -583,12 +583,71 @@ namespace MonitorSwitch
             if (!ConfigStore.Dock.Enabled || slot == null) return;
             Profile p = slot == "A" ? ProfileA : ProfileB;
             if (!IsSet(p)) return;
-            if (arriving)
-            {
-                var live = Ddc.ReadInputs();
-                if (live.Count > 0 && Ddc.CountOnProfile(p, live) == live.Count) return;
-            }
+            CancelDockRetry();
+            var live = Ddc.ReadInputs();
+            if (arriving && AllHome(p, live)) return;
             Apply(p);
+            // The return direction is fragile: a monitor showing the other
+            // computer may not accept commands until its link to this GPU
+            // wakes up (seen live: the ASUS obeys immediately, the Dell only
+            // later). Keep re-applying quietly for a while.
+            if (arriving) StartDockRetry(slot);
+        }
+
+        static Timer dockRetry;
+        static int dockRetryStep;
+        static string dockRetrySlot;
+        static readonly int[] dockRetryDelays = { 4000, 8000, 12000, 15000, 20000, 25000 };
+
+        // "Everything came home" means every monitor the PROFILE covers is
+        // present and on target - NOT merely every currently-visible monitor.
+        // A monitor still showing the other computer often drops off this
+        // PC's display list entirely, and counting only visible monitors made
+        // the retry loop stop after the first one returned (live bug).
+        static bool AllHome(Profile p, List<MonitorInput> live)
+        {
+            return Ddc.CountOnProfile(p, live) >= p.Inputs.Count;
+        }
+
+        static void CancelDockRetry()
+        {
+            if (dockRetry != null) { dockRetry.Stop(); dockRetry.Dispose(); dockRetry = null; }
+        }
+
+        static void StartDockRetry(string slot)
+        {
+            dockRetrySlot = slot;
+            dockRetryStep = 0;
+            dockRetry = new Timer { Interval = dockRetryDelays[0] };
+            dockRetry.Tick += DockRetryTick;
+            dockRetry.Start();
+        }
+
+        static void DockRetryTick(object sender, EventArgs e)
+        {
+            Profile p = dockRetrySlot == "A" ? ProfileA : ProfileB;
+            var live = Ddc.ReadInputs();
+            bool done = AllHome(p, live);
+            if (!done) Ddc.ApplyProfile(p);          // quiet - no balloon per retry
+            dockRetryStep++;
+            if (done)
+            {
+                CancelDockRetry();
+                return;
+            }
+            if (dockRetryStep >= dockRetryDelays.Length)
+            {
+                CancelDockRetry();
+                live = Ddc.ReadInputs();
+                if (!AllHome(p, live))
+                    Tray.ShowBalloonTip(4000, "Monitor Switch",
+                        "Some monitors didn't come back to " + p.Name + ". Switch them " +
+                        "with the monitor's input button - or install this app on the " +
+                        "other computer, which makes the return switch reliable.",
+                        ToolTipIcon.Warning);
+                return;
+            }
+            dockRetry.Interval = dockRetryDelays[dockRetryStep];
         }
 
         public static void SetTheme(ThemeMode mode)

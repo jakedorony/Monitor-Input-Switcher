@@ -141,18 +141,25 @@ namespace MonitorSwitch
         // Hidden message-only window receiving WM_DEVICECHANGE.
         class NotifyWindow : NativeWindow
         {
-            IntPtr registration;
+            IntPtr regDevices, regHubs;
 
             public NotifyWindow()
             {
                 CreateHandle(new CreateParams());
+                regDevices = Register(Native.GUID_DEVINTERFACE_USB_DEVICE);
+                // Hubs (the reliable dock signature) have their own class.
+                regHubs = Register(Native.GUID_DEVINTERFACE_USB_HUB);
+            }
+
+            IntPtr Register(Guid cls)
+            {
                 var filter = new Native.DEV_BROADCAST_DEVICEINTERFACE
                 {
                     dbcc_size = Marshal.SizeOf(typeof(Native.DEV_BROADCAST_DEVICEINTERFACE)) + 2,
                     dbcc_devicetype = Native.DBT_DEVTYP_DEVICEINTERFACE,
-                    dbcc_classguid = Native.GUID_DEVINTERFACE_USB_DEVICE
+                    dbcc_classguid = cls
                 };
-                registration = Native.RegisterDeviceNotificationW(
+                return Native.RegisterDeviceNotificationW(
                     Handle, ref filter, Native.DEVICE_NOTIFY_WINDOW_HANDLE);
             }
 

@@ -115,6 +115,14 @@ press the dock's button away and back while the app listens, and save. From
 then on, one press moves keyboard, mouse, and monitors together. Each
 computer configures this separately.
 
+For the smoothest experience install the app on **both** computers: some
+monitors (older Dells, for example) can't be reached by a computer they
+aren't currently showing, so each computer handles the "dock is leaving me"
+half of the switch — which always works — and the whole round trip becomes
+reliable. With the app on only one machine, the switch away is perfect and
+the switch back may need a monitor or two pressed by hand (the app tells
+you when that happens).
+
 ---
 
 ## Part 4 — Optional polish (technical)

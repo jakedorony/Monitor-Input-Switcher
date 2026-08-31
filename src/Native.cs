@@ -148,6 +148,10 @@ namespace MonitorSwitch
         public static readonly Guid GUID_DEVINTERFACE_USB_DEVICE =
             new Guid(0xA5DCBF10, 0x6530, 0x11D2, 0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED);
 
+        // Hubs announce under their own interface class, not USB_DEVICE.
+        public static readonly Guid GUID_DEVINTERFACE_USB_HUB =
+            new Guid(0xF18A0E88, 0xC30C, 0x11D0, 0x88, 0x15, 0x00, 0xA0, 0xC9, 0x06, 0xBE, 0xD8);
+
         // Fixed-size head of DEV_BROADCAST_DEVICEINTERFACE_W; the device path
         // string follows in memory at offset 28 and is read with Marshal.
         [StructLayout(LayoutKind.Sequential)]
