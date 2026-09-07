@@ -1,8 +1,8 @@
-# Version manifest. Submit the three files in this folder to
+﻿# Version manifest. Submit the three files in this folder to
 # microsoft/winget-pkgs under manifests/j/jakedorony/MonitorInputSwitcher/<version>/
 # (easiest: `wingetcreate submit` or the "Add a package" flow on that repo).
 PackageIdentifier: jakedorony.MonitorInputSwitcher
-PackageVersion: 2.6.0
+PackageVersion: 2.6.1
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
