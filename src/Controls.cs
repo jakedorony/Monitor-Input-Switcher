@@ -78,7 +78,10 @@ namespace MonitorSwitch
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.Selectable, true);
+                     ControlStyles.Selectable | ControlStyles.SupportsTransparentBackColor, true);
+            // Without this the default light-gray control background bleeds
+            // through the antialiased rounded edge - a white fringe in dark mode.
+            BackColor = Color.Transparent;
             Cursor = Cursors.Hand;
         }
 
@@ -95,10 +98,17 @@ namespace MonitorSwitch
             Color fill = Primary ? AccentFill : Fill;
             if (hover && Enabled) fill = Primary ? ControlPaint.Light(AccentFill, 0.15f) : HoverFill;
             if (down) fill = ControlPaint.Dark(fill, 0.08f);
-            if (!Enabled) fill = ControlPaint.LightLight(fill);
+            Color edge = Primary ? AccentFill : Border;
+            if (!Enabled)
+            {
+                // Fade toward the parent background instead of LightLight,
+                // which flashed near-white on the dark palette.
+                fill = Color.FromArgb(Primary ? 110 : 60, fill);
+                edge = Color.FromArgb(110, edge);
+            }
             using (var path = Draw.RoundRect(r, Radius * s))
             using (var b = new SolidBrush(fill))
-            using (var pen = new Pen(Primary ? AccentFill : Border, 1f * s))
+            using (var pen = new Pen(edge, 1f * s))
             {
                 e.Graphics.FillPath(b, path);
                 e.Graphics.DrawPath(pen, path);
@@ -160,7 +170,9 @@ namespace MonitorSwitch
         public SegmentedSwitch()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                     ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;   // see FlatButton: kills the white edge fringe
             Cursor = Cursors.Hand;
         }
 
@@ -424,7 +436,9 @@ namespace MonitorSwitch
         public InputPicker()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                     ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;   // see FlatButton: kills the white edge fringe
             Cursor = Cursors.Hand;
             Height = 26;
         }

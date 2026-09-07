@@ -30,6 +30,7 @@ namespace MonitorSwitch
         Palette P { get { return Theme.Current; } }
         bool building;
         string status = "";             // transient message under the account section
+        int cardW, innerW;              // section card width, content width inside it
 
         int L(float logical) { return (int)Math.Round(logical * scale); }
 
@@ -78,17 +79,28 @@ namespace MonitorSwitch
                 Controls.Clear();
                 BackColor = P.Bg;
 
-                var stack = new FlowLayoutPanel
+                int sbw = SystemInformation.VerticalScrollBarWidth;
+                int cap = Screen.FromControl(this).WorkingArea.Height - L(80);
+
+                // Lay out assuming a scrollbar (it is part of the right margin,
+                // so the cards shrink to keep the margins symmetric). If the
+                // content fits on screen, relayout at full width instead and
+                // size the window to the content - no scrollbar at all.
+                cardW = ClientSize.Width - L(40) - sbw;
+                innerW = cardW - L(28);
+                var stack = BuildStack();
+                int contentH = StackHeight(stack);
+                if (contentH <= cap)
                 {
-                    Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false,
-                    AutoScroll = true, BackColor = P.Bg, Padding = new Padding(L(20), L(16), L(20), L(16))
-                };
-                stack.Controls.Add(Section("Account & sync", BuildAccount()));
-                stack.Controls.Add(Section("Appearance", BuildAppearance()));
-                stack.Controls.Add(Section("Startup", BuildStartup()));
-                stack.Controls.Add(Section("Monitor matching", BuildMatching()));
-                stack.Controls.Add(Section("Dock button", BuildDock()));
-                stack.Controls.Add(Section("Help", BuildHelp()));
+                    foreach (Control c in stack.Controls) c.Dispose();
+                    stack.Dispose();
+                    cardW += sbw; innerW += sbw;
+                    stack = BuildStack();
+                    stack.AutoScroll = false;
+                    contentH = StackHeight(stack);
+                    if (ClientSize.Height != contentH) ClientSize = new Size(ClientSize.Width, contentH);
+                }
+                else if (ClientSize.Height != cap) ClientSize = new Size(ClientSize.Width, cap);
                 Controls.Add(stack);
             }
             finally
@@ -98,12 +110,37 @@ namespace MonitorSwitch
             }
         }
 
+        FlowLayoutPanel BuildStack()
+        {
+            var stack = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false,
+                // Bottom padding is smaller because the last card's 12px
+                // margin is part of the gap.
+                AutoScroll = true, BackColor = P.Bg, Padding = new Padding(L(20), L(16), L(20), L(4))
+            };
+            stack.Controls.Add(Section("Account & sync", BuildAccount()));
+            stack.Controls.Add(Section("Appearance", BuildAppearance()));
+            stack.Controls.Add(Section("Startup", BuildStartup()));
+            stack.Controls.Add(Section("Monitor matching", BuildMatching()));
+            stack.Controls.Add(Section("Dock button", BuildDock()));
+            stack.Controls.Add(Section("Help", BuildHelp()));
+            return stack;
+        }
+
+        static int StackHeight(FlowLayoutPanel stack)
+        {
+            int h = stack.Padding.Vertical;
+            foreach (Control c in stack.Controls) h += c.Height + c.Margin.Vertical;
+            return h;
+        }
+
         Control Section(string title, Control content)
         {
-            int inner = L(392);
+            int inner = innerW;
             var card = new Card
             {
-                Fill = P.Card, Border = P.Border, Radius = 8f, Width = L(420),
+                Fill = P.Card, Border = P.Border, Radius = 8f, Width = cardW,
                 Margin = new Padding(0, 0, 0, L(12)), Padding = new Padding(L(14), L(10), L(14), L(12))
             };
             var col = new TableLayoutPanel
@@ -133,7 +170,7 @@ namespace MonitorSwitch
             return new Label
             {
                 Text = text, Font = Theme.Small, ForeColor = P.Muted, AutoSize = true,
-                MaximumSize = new Size(L(390), 0), Margin = new Padding(0, 0, 0, L(8))
+                MaximumSize = new Size(innerW, 0), Margin = new Padding(0, 0, 0, L(8))
             };
         }
 
@@ -154,13 +191,27 @@ namespace MonitorSwitch
 
         TextBox Field(string placeholder, bool password)
         {
+            // Borderless; lives inside a Shell() card so the border matches
+            // the theme (the stock FixedSingle border ignores the palette).
             var t = new TextBox
             {
-                PlaceholderText = placeholder, Font = Theme.Body, BorderStyle = BorderStyle.FixedSingle,
-                BackColor = P.Field, ForeColor = P.Text, Width = L(186), Margin = new Padding(0, 0, L(8), L(8)),
-                UseSystemPasswordChar = password
+                PlaceholderText = placeholder, Font = Theme.Body, BorderStyle = BorderStyle.None,
+                BackColor = P.Field, ForeColor = P.Text, UseSystemPasswordChar = password
             };
             return t;
+        }
+
+        Control Shell(TextBox t, int width)
+        {
+            var c = new Card
+            {
+                Fill = P.Field, Border = P.Border, Radius = 6f,
+                Size = new Size(width, L(30)), Margin = new Padding(0, 0, L(8), L(8))
+            };
+            t.Width = width - L(18);
+            t.Location = new Point(L(9), (L(30) - t.PreferredHeight) / 2 + 1);
+            c.Controls.Add(t);
+            return c;
         }
 
         FlowLayoutPanel Row()
@@ -236,7 +287,8 @@ namespace MonitorSwitch
                 col.Controls.Add(Note("Sign in to share your two profiles across all the computers plugged into these monitors. Create an account once; then sign in with it on each PC."));
                 var email = Field("Email", false);
                 var pw = Field("Password", true);
-                var fields = Row(); fields.Controls.Add(email); fields.Controls.Add(pw);
+                int fw = (innerW - L(16)) / 2;
+                var fields = Row(); fields.Controls.Add(Shell(email, fw)); fields.Controls.Add(Shell(pw, fw));
                 col.Controls.Add(fields);
                 var row = Row();
                 FlatButton signIn = null, signUp = null;
@@ -273,7 +325,7 @@ namespace MonitorSwitch
             statusLabel = new Label
             {
                 Text = status, Font = Theme.Small, ForeColor = P.WarnFg, AutoSize = true,
-                MaximumSize = new Size(L(390), 0), Margin = new Padding(0, L(8), 0, 0)
+                MaximumSize = new Size(innerW, 0), Margin = new Padding(0, L(8), 0, 0)
             };
             col.Controls.Add(statusLabel);
             return col;
@@ -401,7 +453,8 @@ namespace MonitorSwitch
             {
                 Fill = P.Field, Border = P.Border, TextColor = P.Text, Muted = P.Muted,
                 MenuBack = P.Card, MenuHover = P.Hover, Accent = P.Accent,
-                Font = Theme.Small, Size = new Size(L(180), L(26)), Margin = new Padding(0, 0, 0, L(6))
+                Font = Theme.Small, Size = new Size(Math.Max(L(150), innerW - L(198)), L(26)),
+                Margin = new Padding(0, 0, 0, L(6))
             };
             var items = new System.Collections.Generic.List<InputPicker.Item>
             {

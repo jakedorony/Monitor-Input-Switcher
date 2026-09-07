@@ -39,6 +39,7 @@ namespace MonitorSwitch
         float scale;
         Palette P { get { return Theme.Current; } }
         bool building;
+        DateTime lastBuildUtc;             // throttles the rebuild-on-activate
         Timer settleTimer;                 // re-read inputs a moment after a switch
         readonly HashSet<string> warming = new HashSet<string>();
 
@@ -70,7 +71,12 @@ namespace MonitorSwitch
                 Theme.Changed -= OnThemeChanged;
                 settleTimer.Dispose();
             };
-            Activated += delegate { if (!building) Refresh(); };
+            // Refresh on activation so the live inputs are current, but not if
+            // we just built (the full rebuild is a visible flicker).
+            Activated += delegate
+            {
+                if (!building && (DateTime.UtcNow - lastBuildUtc).TotalSeconds > 1.0) Refresh();
+            };
 
             BuildUi();
         }
@@ -111,6 +117,16 @@ namespace MonitorSwitch
 
                 var live = Ddc.ReadInputs();
 
+                // Size the window to its content: header + body rows + footer.
+                // (A fixed height left a dead zone inside the profile cards.)
+                int tiles = Math.Max(1, live.Count);
+                int cardH = ProfileCardHeight(live);
+                int wanted = L(52) + L(14) + L(22) + L(84 + 16) + L(24) + L(tiles * 62)
+                           + L(24) + cardH + L(12) + L(46);
+                int cap = Screen.FromControl(this).WorkingArea.Height - L(80);
+                if (wanted > cap) wanted = cap;
+                if (ClientSize.Height != wanted) ClientSize = new Size(L(520), wanted);
+
                 var root = new TableLayoutPanel
                 {
                     Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
@@ -130,7 +146,25 @@ namespace MonitorSwitch
             {
                 ResumeLayout(true);
                 building = false;
+                lastBuildUtc = DateTime.UtcNow;
             }
+        }
+
+        // How tall the two profile cards need to be (they share one height):
+        // name row + picker rows (or the "nothing saved" note) + actions + padding.
+        int ProfileCardHeight(List<MonitorInput> live)
+        {
+            int cardW = (L(520) - L(40) - L(10)) / 2;      // body padding + gap between cards
+            int innerW = cardW - L(24);                    // card padding
+            int content = Math.Max(1, live.Count) * L(34);
+            if (!TrayApp.IsSet(TrayApp.ProfileA) || !TrayApp.IsSet(TrayApp.ProfileB))
+            {
+                Size note = TextRenderer.MeasureText(
+                    "Nothing saved yet. Set the monitors how you want them, then Save current setup.",
+                    Theme.Small, new Size(innerW, 0), TextFormatFlags.WordBreak);
+                content = Math.Max(content, note.Height + L(6));
+            }
+            return L(24) + content + L(22) + L(20) + L(4);
         }
 
         Control BuildHeader()
