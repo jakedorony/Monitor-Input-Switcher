@@ -192,6 +192,10 @@ submitting to microsoft/winget-pkgs.
   each computer. Departure actions are always safe (our DDC link is still
   live); arrival actions are skipped when the scoped monitor (or all of
   them) is already on target (idempotent if both machines run the app).
+  `Dock.Enabled` is also a sticky tray-menu toggle ("Dock button switches
+  monitors", hidden until a dock is configured; state refreshed on menu
+  Opening) so the button can move just the keyboard/mouse while monitors
+  stay put.
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash
   logging to `%APPDATA%\MonitorSwitch\log.txt`).
 - App icon: `MonitorSwitch.ico` doubles as `ApplicationIcon` and an

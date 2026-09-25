@@ -16,6 +16,11 @@ body, and the app shows it in its "What's new" window after an upgrade
   to, and they used to make "Save current setup" fail on laptops. If a
   real monitor is ever hidden by mistake, turn it off under Settings ->
   Monitor matching.
+- **Turn the dock button's monitor switching off from the tray.** A new
+  right-click menu item, "Dock button switches monitors", lets the button
+  keep moving your keyboard and mouse while the monitors stay put -
+  handy when you switch monitors from the app instead. It stays off
+  until you turn it back on.
 - **Patch notes in the app.** After an update, a "What's new" window
   shows what changed (this text!). It's also in Settings -> Help.
 - **Fixed a crash** that could kill the app on the next click after using

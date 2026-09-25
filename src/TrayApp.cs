@@ -66,6 +66,26 @@ namespace MonitorSwitch
             var itemToggle = menu.Items.Add("Switch (toggle A/B)");
             itemToggle.Click += delegate { ToggleProfiles(); };
 
+            // Sticky mode switch: unchecked, the dock button still moves the
+            // keyboard/mouse (the dock's own hardware) but the monitors stay
+            // put - for people who switch monitors from the GUI instead.
+            // Same setting as the Settings toggle; hidden until a dock is
+            // configured. Checked/Visible refresh every time the menu opens.
+            var itemDockFollow = new ToolStripMenuItem("Dock button switches monitors");
+            itemDockFollow.Click += delegate
+            {
+                ConfigStore.Dock.Enabled = !ConfigStore.Dock.Enabled;
+                SaveConfig();
+                DockWatch.Reconfigure();
+                RaiseProfilesChanged();      // open windows refresh their dock section
+            };
+            menu.Items.Add(itemDockFollow);
+            menu.Opening += delegate
+            {
+                itemDockFollow.Visible = ConfigStore.Dock.Signatures.Count > 0;
+                itemDockFollow.Checked = ConfigStore.Dock.Enabled;
+            };
+
             menu.Items.Add(new ToolStripSeparator());
 
             itemA = menu.Items.Add(ProfileA.Name);
