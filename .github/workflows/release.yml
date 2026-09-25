@@ -23,12 +23,35 @@ jobs:
       - name: Compile installer
         run: iscc MonitorSwitch.iss
 
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ver = $env:TAG.TrimStart('v')
+          $lines = Get-Content CHANGELOG.md
+          $start = -1; $end = $lines.Count
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($start -lt 0 -and $lines[$i] -match ('^## ' + [regex]::Escape($ver) + '\b')) { $start = $i + 1 }
+            elseif ($start -ge 0 -and $lines[$i] -match '^## ') { $end = $i; break }
+          }
+          if ($start -lt 0) {
+            Write-Host "No CHANGELOG.md section for $ver - the release will use generated notes."
+            Set-Content notes.md "" -Encoding utf8
+          } else {
+            $lines[$start..($end - 1)] | Set-Content notes.md -Encoding utf8
+            Write-Host "Using CHANGELOG.md section for $ver."
+          }
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ github.ref_name }}"
-          publish/MonitorSwitch.exe
-          Output/MonitorSwitch-Setup-*.exe
-          --title "Monitor Input Switcher ${{ github.ref_name }}"
-          --generate-notes
+          # Passed via env, not inline interpolation, so a hostile tag name
+          # can't inject into the script (standard Actions hardening).
+          TAG: ${{ github.ref_name }}
+        run: |
+          $common = @("$env:TAG", "publish/MonitorSwitch.exe") + (Get-Item Output/MonitorSwitch-Setup-*.exe | ForEach-Object FullName) + @("--title", "Monitor Input Switcher $env:TAG")
+          if ((Get-Content notes.md -Raw).Trim().Length -gt 0) {
+            gh release create @common --notes-file notes.md
+          } else {
+            gh release create @common --generate-notes
+          }

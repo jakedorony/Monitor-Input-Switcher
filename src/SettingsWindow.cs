@@ -78,6 +78,7 @@ namespace MonitorSwitch
                 foreach (Control c in Controls) c.Dispose();
                 Controls.Clear();
                 BackColor = P.Bg;
+                dockMonitors = null;             // re-enumerate on each rebuild
 
                 int sbw = SystemInformation.VerticalScrollBarWidth;
                 int cap = Screen.FromControl(this).WorkingArea.Height - L(80);
@@ -367,7 +368,12 @@ namespace MonitorSwitch
                 if (!TrayApp.SetStartupEnabled(toggle.On)) toggle.On = TrayApp.GetStartupEnabled();
             };
             lbl.Cursor = Cursors.Hand;
-            lbl.Click += delegate { toggle.On = !toggle.On; };
+            // Setting On doesn't raise Toggled, so apply the change explicitly.
+            lbl.Click += delegate
+            {
+                toggle.On = !toggle.On;
+                if (!TrayApp.SetStartupEnabled(toggle.On)) toggle.On = TrayApp.GetStartupEnabled();
+            };
             row.Controls.Add(toggle); row.Controls.Add(lbl);
             return row;
         }
@@ -375,6 +381,28 @@ namespace MonitorSwitch
         Control BuildMatching()
         {
             var col = Col();
+
+            // Built-in laptop panels can't switch inputs and often refuse the
+            // DDC read that all-or-nothing capture requires, so they're
+            // skipped by default; this is the escape hatch.
+            var rowIgn = Row();
+            var ign = new ToggleSwitch
+            {
+                On = ConfigStore.IgnoreInternal, Accent = P.Accent, Track = P.Track, Knob = Color.White,
+                Size = new Size(L(34), L(18)), Margin = new Padding(0, L(3), L(10), L(10))
+            };
+            ign.Toggled += delegate { TrayApp.SetIgnoreInternal(ign.On); };
+            var ignLbl = new Label
+            {
+                Text = "Ignore this computer's built-in screen", Font = Theme.Body,
+                ForeColor = P.Text, AutoSize = true, Margin = new Padding(0, L(2), 0, 0)
+            };
+            ignLbl.Cursor = Cursors.Hand;
+            ignLbl.Click += delegate { ign.On = !ign.On; TrayApp.SetIgnoreInternal(ign.On); };
+            rowIgn.Controls.Add(ign); rowIgn.Controls.Add(ignLbl);
+            col.Controls.Add(rowIgn);
+            col.Controls.Add(Note("A laptop's own screen has no other input to switch to, and it can stop profiles from being saved - so the app leaves it out of the window and the profiles. Turn this off only if a real monitor is being hidden by mistake."));
+
             col.Controls.Add(Note("Some monitors identify themselves differently on each computer, so the app works out which ones are the same and remembers it. If a profile ever switches the wrong monitor, clear what it learned and switch again. Your profiles are not affected."));
             int learned = TrayApp.LearnedMatchCount();
             var row = Row();
@@ -429,10 +457,18 @@ namespace MonitorSwitch
             rowEn.Controls.Add(new Label { Text = "Switch monitors when the dock button is pressed", Font = Theme.Body, ForeColor = P.Text, AutoSize = true, Margin = new Padding(0, L(2), 0, 0) });
             col.Controls.Add(rowEn);
 
-            col.Controls.Add(DockDirectionRow("When the dock leaves this PC", d.OnDeparted,
-                delegate(string v) { ConfigStore.Dock.OnDeparted = v; TrayApp.SaveConfig(); }));
-            col.Controls.Add(DockDirectionRow("When the dock comes back", d.OnArrived,
-                delegate(string v) { ConfigStore.Dock.OnArrived = v; TrayApp.SaveConfig(); }));
+            col.Controls.Add(DockDirectionRow("When the dock leaves this PC", d.OnDeparted, d.OnDepartedMonitor,
+                delegate(string s, string m)
+                {
+                    ConfigStore.Dock.OnDeparted = s; ConfigStore.Dock.OnDepartedMonitor = m;
+                    TrayApp.SaveConfig();
+                }));
+            col.Controls.Add(DockDirectionRow("When the dock comes back", d.OnArrived, d.OnArrivedMonitor,
+                delegate(string s, string m)
+                {
+                    ConfigStore.Dock.OnArrived = s; ConfigStore.Dock.OnArrivedMonitor = m;
+                    TrayApp.SaveConfig();
+                }));
 
             var rowBtn = Row();
             rowBtn.Controls.Add(Button("Set up again...", false, delegate { RunDockWizard(); }));
@@ -440,7 +476,13 @@ namespace MonitorSwitch
             return col;
         }
 
-        Control DockDirectionRow(string label, string current, Action<string> save)
+        // One dock direction = one function: switch every monitor to a
+        // profile, or switch just one chosen monitor to it.
+        //   value 0            = do nothing
+        //   value 1 / 2        = all monitors -> A / B
+        //   value 10+2i / 11+2i = monitor i   -> A / B
+        //   value 3            = configured monitor not connected (display only)
+        Control DockDirectionRow(string label, string slot, string monitorId, Action<string, string> save)
         {
             var row = Row();
             row.Controls.Add(new Label
@@ -456,21 +498,74 @@ namespace MonitorSwitch
                 Font = Theme.Small, Size = new Size(Math.Max(L(150), innerW - L(198)), L(26)),
                 Margin = new Padding(0, 0, 0, L(6))
             };
+            string nameA = TrayApp.ProfileA.Name, nameB = TrayApp.ProfileB.Name;
+            var mons = DockMonitors();
             var items = new System.Collections.Generic.List<InputPicker.Item>
             {
                 new InputPicker.Item { Value = 0, Label = "Do nothing" },
-                new InputPicker.Item { Value = 1, Label = "Switch to " + TrayApp.ProfileA.Name },
-                new InputPicker.Item { Value = 2, Label = "Switch to " + TrayApp.ProfileB.Name }
+                new InputPicker.Item { Value = 1, Label = "All monitors → " + nameA },
+                new InputPicker.Item { Value = 2, Label = "All monitors → " + nameB }
             };
-            uint cur = current == "A" ? 1u : current == "B" ? 2u : 0u;
+            uint cur = slot == "A" ? 1u : slot == "B" ? 2u : 0u;
+            for (int i = 0; i < mons.Count; i++)
+            {
+                string mon = ShortMon(mons[i]);
+                items.Add(new InputPicker.Item { Value = (uint)(10 + 2 * i), Label = "Only " + mon + " → " + nameA });
+                items.Add(new InputPicker.Item { Value = (uint)(11 + 2 * i), Label = "Only " + mon + " → " + nameB });
+                if (monitorId == mons[i] && slot != null)
+                    cur = (uint)(10 + 2 * i + (slot == "B" ? 1 : 0));
+            }
+            if (monitorId != null && slot != null && !mons.Contains(monitorId))
+            {
+                // Keep an unplugged monitor's setting visible instead of
+                // silently showing something else; picking it changes nothing.
+                items.Add(new InputPicker.Item
+                {
+                    Value = 3,
+                    Label = "Only " + monitorId + " (not connected) → " + (slot == "A" ? nameA : nameB)
+                });
+                cur = 3;
+            }
             picker.SetCustomItems(items, cur);
             picker.ValueChanged += delegate
             {
                 uint v = picker.SelectedValue2;
-                save(v == 1 ? "A" : v == 2 ? "B" : null);
+                if (v == 3) return;
+                if (v >= 10)
+                {
+                    int i = (int)(v - 10) / 2;
+                    if (i < mons.Count) save((v - 10) % 2 == 0 ? "A" : "B", mons[i]);
+                    return;
+                }
+                save(v == 1 ? "A" : v == 2 ? "B" : null, null);
             };
             row.Controls.Add(picker);
             return row;
+        }
+
+        // Connected monitor ids, fetched once per rebuild (DDC enumeration
+        // isn't free and Build lays the stack out twice).
+        System.Collections.Generic.List<string> dockMonitors;
+        System.Collections.Generic.List<string> DockMonitors()
+        {
+            if (dockMonitors == null)
+            {
+                dockMonitors = new System.Collections.Generic.List<string>();
+                foreach (var m in Ddc.ReadInputs())
+                    if (!string.IsNullOrEmpty(m.Id)) dockMonitors.Add(m.Id);
+            }
+            return dockMonitors;
+        }
+
+        // "ASUS PG27AQDM" -> "ASUS" (plus the #2 suffix for identical models),
+        // so the picker line stays short.
+        static string ShortMon(string monitorId)
+        {
+            string full = MonitorNames.Friendly(monitorId);
+            int sp = full.IndexOf(' ');
+            string first = sp > 0 ? full.Substring(0, sp) : full;
+            int hash = monitorId.IndexOf('#');
+            return hash > 0 ? first + " (" + monitorId.Substring(hash + 1) + ")" : first;
         }
 
         void RunDockWizard()
@@ -488,6 +583,19 @@ namespace MonitorSwitch
             var col = Col();
             var row = Row();
             row.Controls.Add(Button("How to use...", false, delegate { HelpWindow.ShowHelp(); }));
+            row.Controls.Add(Button("What's new...", false, async delegate(object s, EventArgs e)
+            {
+                var b = (FlatButton)s;
+                b.Enabled = false;
+                string ver = Application.ProductVersion.Split('+')[0];
+                string notes = await ReleaseNotes.FetchAsync("v" + ver);
+                if (!b.IsDisposed) b.Enabled = true;
+                NotesWindow.ShowNotes("What's new in " + ver,
+                    notes ?? "Couldn't load the notes - check your internet connection." +
+                             Environment.NewLine + Environment.NewLine +
+                             "The release page always has them:",
+                    ReleaseNotes.PageUrl("v" + ver));
+            }));
             row.Controls.Add(Button("Check for updates", false, delegate
             {
                 try

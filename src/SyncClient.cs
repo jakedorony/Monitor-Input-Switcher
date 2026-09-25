@@ -158,11 +158,23 @@ namespace MonitorSwitch
 
         public static void SignOut()
         {
+            string bearer = accessToken;
             accessToken = null;
             refreshToken = null;
             Email = null;
             accessExpiresUtc = DateTime.MinValue;
             AuthStore.Delete();
+            // Best-effort server-side revocation of THIS session's refresh
+            // token (scope=local leaves the user's other PCs signed in), so a
+            // copy of auth.dat taken earlier can't resume a signed-out
+            // session. Local state is already gone, so failures don't matter.
+            if (bearer != null) RevokeAsync(bearer);
+        }
+
+        static async void RevokeAsync(string bearer)
+        {
+            try { await PostAsync(SupabaseUrl + "/auth/v1/logout?scope=local", "{}", bearer); }
+            catch { }
         }
 
         static void AdoptSession(string json, string fallbackEmail)
@@ -330,12 +342,30 @@ namespace MonitorSwitch
                             return "Wrong email or password.";
                         if (err.ErrorCode == "email_not_confirmed")
                             return "Email not confirmed yet - check your inbox for the confirmation link.";
-                        return m;
+                        return Clip(m);
                     }
                 }
             }
             catch { }
             return "Sync server error (HTTP " + status + ").";
+        }
+
+        // Server-supplied text ends up in labels and balloons: keep it
+        // printable, single-spaced, and bounded no matter what the wire says.
+        static string Clip(string s)
+        {
+            var sb = new StringBuilder();
+            foreach (char c in s)
+            {
+                if (char.IsControl(c))
+                {
+                    if (sb.Length > 0 && sb[sb.Length - 1] != ' ') sb.Append(' ');
+                    continue;
+                }
+                sb.Append(c);
+                if (sb.Length >= 200) { sb.Append("..."); break; }
+            }
+            return sb.ToString();
         }
     }
 }

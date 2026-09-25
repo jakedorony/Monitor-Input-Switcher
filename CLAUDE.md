@@ -39,10 +39,14 @@ Installer: `ISCC.exe MonitorSwitch.iss` (Inno Setup 6) after build.bat.
 Output lands in `Output\MonitorSwitch-Setup-<ver>.exe`.
 
 CI: `.github/workflows/build.yml` publishes the exe as an artifact on push.
-Releases: push a tag `vX.Y.Z` (matching the two version fields!) and
+Releases: add a `## X.Y.Z - date` section to `CHANGELOG.md` (user-facing
+wording — it becomes the GitHub release body AND the in-app "What's new"
+text), push a tag `vX.Y.Z` (matching the two version fields!) and
 `.github/workflows/release.yml` builds and publishes a GitHub Release with
-the installer + exe. winget manifests live in `winget/` — update the version,
-URL, and sha256 per release before submitting to microsoft/winget-pkgs.
+the installer + exe, using that section as the notes (falls back to
+--generate-notes if the section is missing). winget manifests live in
+`winget/` — update the version, URL, and sha256 per release before
+submitting to microsoft/winget-pkgs.
 
 ## Hard constraints — do not violate
 
@@ -62,7 +66,10 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
    ingest path must call it too.
 5. **Supabase grants are minimal.** `anon` has no table privileges at all;
    `authenticated` has only SELECT/INSERT/UPDATE/DELETE (RLS does not cover
-   TRUNCATE). Default privileges for new public tables revoke `anon`.
+   TRUNCATE). Default privileges in `public` revoke `anon` for new tables,
+   functions AND sequences (migration
+   `revoke_anon_default_function_sequence_privs`, 2026-09-25) — a future
+   RPC can never become anon-callable by accident.
 6. **CI actions are pinned to commit SHAs** with the tag in a comment; bump
    deliberately, never back to a floating `@v4`. build.yml is read-only.
 7. **Sync must stay optional.** Every DDC/profile feature works signed-out and
@@ -77,7 +84,8 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   `HKCU\...\CurrentVersion\Run` — written by the installer's `startupicon`
   task AND the app's checkbox (`RunValueName` in src/TrayApp.cs).
 - **Version** — bump in two places: `Version`/`AssemblyVersion`/`FileVersion`
-  in MonitorSwitch.csproj, `MyAppVersion` in MonitorSwitch.iss.
+  in MonitorSwitch.csproj, `MyAppVersion` in MonitorSwitch.iss — and add the
+  matching `## X.Y.Z - date` section to CHANGELOG.md (release notes).
 - **Installer AppId GUID** `{7E04BDB0-0970-4FC3-B0F2-EF204F09A3C3}` — never
   change; it's the upgrade/uninstall identity.
 - **Supabase project** `monitor-switch` (ref `cvnpmmmkzphhgmimfrpi`, org
@@ -101,11 +109,21 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
 - `Native.cs` — P/Invoke: dxva2 DDC/CI (+ capabilities string), user32 (incl.
   GetMonitorInfoW / EnumDisplayDevicesW for monitor identity), crypt32
   DPAPI, dwmapi (dark title bar).
-- `Ddc.cs` — enumeration + VCP 0x60. Each `PhysMon` gets an `Id` = PnP
+- `Ddc.cs` — enumeration + VCP 0x60. `GetMonitors` skips built-in laptop
+  panels (QueryDisplayConfig output technology LVDS/eDP/eUDI/INTERNAL;
+  a GDI device is skipped only when ALL its active targets are embedded)
+  while `ConfigStore.IgnoreInternal` is true (default; device-local; the
+  Settings "Monitor matching" toggle is the escape hatch). Rationale: a
+  lid panel has no other input, and its failed DDC read blocked the
+  all-or-nothing `CaptureCurrent` on laptops. `LastIgnoredInternal` feeds
+  the main window's empty-state hint. Each `PhysMon` gets an `Id` = PnP
   hardware id (e.g. "DEL40A8"; duplicates get "#2", "#3"). `Plan` does the
   three-tier match (id / legacy positional / leftover pairing — see Sync
-  model) and `ApplyProfile` returns an `ApplyOutcome` counting applied,
-  failed and unmatched monitors. `CaptureCurrent` (all-or-null, keyed by id),
+  model) and `ApplyProfile(p, onlyMonitorId = null)` returns an
+  `ApplyOutcome` counting applied, failed and unmatched monitors. A scoped
+  apply plans against ALL connected monitors (identical matching) but
+  writes only the one in scope; out-of-scope monitors are never counted as
+  unmatched. `MonitorOnProfile` is the scoped sibling of `CountOnProfile`. `CaptureCurrent` (all-or-null, keyed by id),
   `ReadInputs`, `SupportedInputs`/`CachedInputs` (per-monitor 0x60 list from
   the capabilities string, cached; `FallbackInputs` otherwise), `SetInput`,
   `DetectInputs`, `UpgradeLegacyEntries` (fills ids into positional data).
@@ -148,6 +166,14 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   identity is still the PnP id.
 - `UpdateCheck.cs` — daily GitHub Releases check (state in
   `update-check.txt`; notifies once per release, click opens the page).
+- `ReleaseNotes.cs` — patch notes in the GUI: fetches a release's body
+  from the GitHub API, reduces it to bounded plain text (`Tidy`: control
+  chars stripped, light markdown cleanup, 8KB cap — it is remote content),
+  and shows it in the themed `NotesWindow`. Triggered once after an
+  upgrade (`TrayApp.ShowWhatsNewAfterUpgradeAsync`, compares
+  `ConfigStore.LastRunVersion`, device-local; silent when offline) and on
+  demand via Settings → Help → "What's new...". The release-page URL is
+  built from the tag, never taken from the response.
 - `DockWatch.cs` — dock/KVM button trigger. A hidden `NativeWindow` gets
   `WM_DEVICECHANGE` (USB interface class); `DockDebounce` (pure, tested by
   replaying a real captured timeline) turns event bursts into one
@@ -159,9 +185,13 @@ URL, and sha256 per release before submitting to microsoft/winget-pkgs.
   labeled suggestion (hub chips are generic parts). `DockWizard.cs` learns
   any dock by capturing a press-away/press-back round trip. Signatures and
   the on-departed/on-arrived slots live in config.json (`Dock`,
-  device-local, NEVER synced). Departure actions are always safe (our DDC
-  link is still live); arrival actions are skipped when monitors are
-  already on the target (idempotent if both machines run the app).
+  device-local, NEVER synced). Each direction optionally scopes to ONE
+  monitor (`OnDepartedMonitor`/`OnArrivedMonitor`, PnP id via `Limits.Id`,
+  null = all): the Settings picker offers "All monitors → X" plus
+  "Only <monitor> → X" per connected monitor, so one screen can live on
+  each computer. Departure actions are always safe (our DDC link is still
+  live); arrival actions are skipped when the scoped monitor (or all of
+  them) is already on target (idempotent if both machines run the app).
 - `HelpWindow.cs`, `Prompt.cs`, `Program.cs` (mutex + WinForms init + crash
   logging to `%APPDATA%\MonitorSwitch\log.txt`).
 - App icon: `MonitorSwitch.ico` doubles as `ApplicationIcon` and an

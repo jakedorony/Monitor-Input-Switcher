@@ -126,10 +126,18 @@ namespace MonitorSwitch
             // fully usable while (and whether or not) this completes.
             InitSyncAsync();
             CheckForUpdatesAsync();
+            wasFirstRun = firstRun;
+            ShowWhatsNewAfterUpgradeAsync();
 
             // Dock button: monitors follow the KVM switch (see DockWatch.cs).
-            DockWatch.Departed += delegate { DockAction(ConfigStore.Dock.OnDeparted, false); };
-            DockWatch.Arrived += delegate { DockAction(ConfigStore.Dock.OnArrived, true); };
+            DockWatch.Departed += delegate
+            {
+                DockAction(ConfigStore.Dock.OnDeparted, ConfigStore.Dock.OnDepartedMonitor, false);
+            };
+            DockWatch.Arrived += delegate
+            {
+                DockAction(ConfigStore.Dock.OnArrived, ConfigStore.Dock.OnArrivedMonitor, true);
+            };
             DockWatch.Start();
 
             Application.Run();
@@ -247,7 +255,10 @@ namespace MonitorSwitch
 
         // ----- profile actions ------------------------------------------------
 
-        public static void Apply(Profile p)
+        // With onlyMonitorId set, switches just that monitor to what the
+        // profile saved for it (the "one screen on work, one on personal"
+        // arrangement); the other monitors are deliberately left alone.
+        public static void Apply(Profile p, string onlyMonitorId = null)
         {
             if (!IsSet(p))
             {
@@ -256,8 +267,11 @@ namespace MonitorSwitch
                     "use \"Save current setup...\" first.", ToolTipIcon.Warning);
                 return;
             }
-            Ddc.ApplyOutcome r = Ddc.ApplyProfile(p);
-            lastSlot = (p == ProfileA) ? 'A' : (p == ProfileB) ? 'B' : lastSlot;
+            Ddc.ApplyOutcome r = Ddc.ApplyProfile(p, onlyMonitorId);
+            // A partial switch doesn't move "where we are" for the toggle's
+            // tie-break, so only a full apply claims the slot.
+            if (onlyMonitorId == null)
+                lastSlot = (p == ProfileA) ? 'A' : (p == ProfileB) ? 'B' : lastSlot;
 
             // Applying can teach us that two ids are the same panel. That is a
             // real content change, so persist it and let the other PCs have it.
@@ -284,6 +298,14 @@ namespace MonitorSwitch
             }
             if (r.Unmatched > 0)
             {
+                if (onlyMonitorId != null)
+                {
+                    Tray.ShowBalloonTip(3000, "Monitor Switch",
+                        MonitorNames.Friendly(onlyMonitorId) + " couldn't be switched: " +
+                        "it isn't connected right now, or " + p.Name + " has nothing " +
+                        "saved for it.", ToolTipIcon.Warning);
+                    return;
+                }
                 // Previously this case silently reported success while leaving
                 // a monitor untouched - the "only one monitor switches" bug.
                 Tray.ShowBalloonTip(3000, "Monitor Switch",
@@ -293,7 +315,10 @@ namespace MonitorSwitch
                 return;
             }
             Tray.ShowBalloonTip(1500, "Monitor Switch",
-                "Switched to: " + p.Name, ToolTipIcon.Info);
+                onlyMonitorId == null
+                    ? "Switched to: " + p.Name
+                    : "Switched " + MonitorNames.Friendly(onlyMonitorId) + " to: " + p.Name,
+                ToolTipIcon.Info);
         }
 
         // Reads current monitor inputs, asks for a name via dialog, stores into
@@ -578,25 +603,28 @@ namespace MonitorSwitch
         // monitors are already on the target, which both swallows resume
         // re-enumeration storms and makes it harmless when the machine on
         // the other side of the dock reacted first.
-        static void DockAction(string slot, bool arriving)
+        // monitorId scopes the direction to one screen (null = all monitors),
+        // so the dock button can move both screens or just one of them.
+        static void DockAction(string slot, string monitorId, bool arriving)
         {
             if (!ConfigStore.Dock.Enabled || slot == null) return;
             Profile p = slot == "A" ? ProfileA : ProfileB;
             if (!IsSet(p)) return;
             CancelDockRetry();
             var live = Ddc.ReadInputs();
-            if (arriving && AllHome(p, live)) return;
-            Apply(p);
+            if (arriving && Home(p, live, monitorId)) return;
+            Apply(p, monitorId);
             // The return direction is fragile: a monitor showing the other
             // computer may not accept commands until its link to this GPU
             // wakes up (seen live: the ASUS obeys immediately, the Dell only
             // later). Keep re-applying quietly for a while.
-            if (arriving) StartDockRetry(slot);
+            if (arriving) StartDockRetry(slot, monitorId);
         }
 
         static Timer dockRetry;
         static int dockRetryStep;
         static string dockRetrySlot;
+        static string dockRetryMonitor;          // null = all monitors
         static readonly int[] dockRetryDelays = { 4000, 8000, 12000, 15000, 20000, 25000 };
 
         // "Everything came home" means every monitor the PROFILE covers is
@@ -609,14 +637,22 @@ namespace MonitorSwitch
             return Ddc.CountOnProfile(p, live) >= p.Inputs.Count;
         }
 
+        // "Home" for a scoped direction means just that monitor is on target.
+        static bool Home(Profile p, List<MonitorInput> live, string monitorId)
+        {
+            return monitorId == null ? AllHome(p, live)
+                                     : Ddc.MonitorOnProfile(p, live, monitorId);
+        }
+
         static void CancelDockRetry()
         {
             if (dockRetry != null) { dockRetry.Stop(); dockRetry.Dispose(); dockRetry = null; }
         }
 
-        static void StartDockRetry(string slot)
+        static void StartDockRetry(string slot, string monitorId)
         {
             dockRetrySlot = slot;
+            dockRetryMonitor = monitorId;
             dockRetryStep = 0;
             dockRetry = new Timer { Interval = dockRetryDelays[0] };
             dockRetry.Tick += DockRetryTick;
@@ -627,8 +663,8 @@ namespace MonitorSwitch
         {
             Profile p = dockRetrySlot == "A" ? ProfileA : ProfileB;
             var live = Ddc.ReadInputs();
-            bool done = AllHome(p, live);
-            if (!done) Ddc.ApplyProfile(p);          // quiet - no balloon per retry
+            bool done = Home(p, live, dockRetryMonitor);
+            if (!done) Ddc.ApplyProfile(p, dockRetryMonitor);   // quiet - no balloon per retry
             dockRetryStep++;
             if (done)
             {
@@ -637,11 +673,13 @@ namespace MonitorSwitch
             }
             if (dockRetryStep >= dockRetryDelays.Length)
             {
+                string monitorId = dockRetryMonitor;
                 CancelDockRetry();
                 live = Ddc.ReadInputs();
-                if (!AllHome(p, live))
+                if (!Home(p, live, monitorId))
                     Tray.ShowBalloonTip(4000, "Monitor Switch",
-                        "Some monitors didn't come back to " + p.Name + ". Switch them " +
+                        (monitorId == null ? "Some monitors" : MonitorNames.Friendly(monitorId)) +
+                        " didn't come back to " + p.Name + ". Switch them " +
                         "with the monitor's input button - or install this app on the " +
                         "other computer, which makes the return switch reliable.",
                         ToolTipIcon.Warning);
@@ -655,6 +693,45 @@ namespace MonitorSwitch
             ConfigStore.Theme = mode.ToString();
             SaveConfig();
             Theme.Set(mode);
+        }
+
+        static bool wasFirstRun;
+
+        // Shows the release notes once after an upgrade. A config written by
+        // a pre-notes version has no LastRunVersion, so "no stored version on
+        // a machine that isn't fresh" also counts as an upgrade. Offline or
+        // missing notes = silently skip; this must never nag.
+        static async void ShowWhatsNewAfterUpgradeAsync()
+        {
+            try
+            {
+                string cur = Application.ProductVersion.Split('+')[0];
+                string last = ConfigStore.LastRunVersion;
+                if (last == cur) return;
+                ConfigStore.LastRunVersion = cur;
+                SaveConfig();
+
+                Version vc, vl;
+                if (!Version.TryParse(cur, out vc)) return;
+                bool upgraded = string.IsNullOrEmpty(last)
+                    ? !wasFirstRun
+                    : Version.TryParse(last, out vl) && vc > vl;
+                if (!upgraded) return;
+
+                string notes = await ReleaseNotes.FetchAsync("v" + cur);
+                if (notes == null) return;
+                NotesWindow.ShowNotes("What's new in " + cur, notes, ReleaseNotes.PageUrl("v" + cur));
+            }
+            catch { }
+        }
+
+        // Toggles whether built-in laptop panels are skipped (Ddc.GetMonitors).
+        // Device-local; open windows re-read the monitor list right away.
+        public static void SetIgnoreInternal(bool on)
+        {
+            ConfigStore.IgnoreInternal = on;
+            SaveConfig();
+            RaiseProfilesChanged();
         }
 
         static async void PushAfterLocalChange()

@@ -17,20 +17,34 @@ namespace MonitorSwitch
     {
         const byte VCP_INPUT = 0x60;
 
+        // How many displays the last GetMonitors call skipped as built-in
+        // laptop panels (UI hint only - the empty state explains itself).
+        public static int LastIgnoredInternal;
+
         public static List<PhysMon> GetMonitors()
         {
             var list = new List<PhysMon>();
             var idCounts = new Dictionary<string, int>();
+            var internals = ConfigStore.IgnoreInternal ? InternalGdiDevices() : null;
+            int ignored = 0;
 
             Native.MonitorEnumProc cb = delegate(IntPtr hMon, IntPtr hdc, IntPtr rect, IntPtr data)
             {
+                string device = GdiDeviceName(hMon);
+                // A laptop's own screen has no other input to switch to, and a
+                // failed DDC read on it blocks all-or-nothing capture - skip it
+                // (before opening physical-monitor handles, so nothing leaks).
+                if (internals != null && device != null && internals.Contains(device))
+                {
+                    ignored++;
+                    return true;
+                }
                 uint count = 0;
                 if (Native.GetNumberOfPhysicalMonitorsFromHMONITOR(hMon, ref count) && count > 0)
                 {
                     var mons = new Native.PHYSICAL_MONITOR[count];
                     if (Native.GetPhysicalMonitorsFromHMONITOR(hMon, count, mons))
                     {
-                        string device = GdiDeviceName(hMon);
                         for (uint j = 0; j < mons.Length; j++)
                         {
                             string rawId = HardwareId(device, j);
@@ -59,7 +73,54 @@ namespace MonitorSwitch
             };
             Native.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, cb, IntPtr.Zero);
             GC.KeepAlive(cb);
+            LastIgnoredInternal = ignored;
             return list;
+        }
+
+        // GDI display devices (\\.\DISPLAYn) whose active outputs are ALL
+        // internal panels. Output technologies: 6 = LVDS, 11 = embedded
+        // DisplayPort, 13 = embedded UDI, 0x80000000 = INTERNAL. A device
+        // that also drives an external target (clone mode) is kept.
+        static HashSet<string> InternalGdiDevices()
+        {
+            var byDevice = new Dictionary<string, bool>();
+            try
+            {
+                uint nPath, nMode;
+                if (Native.GetDisplayConfigBufferSizes(Native.QDC_ONLY_ACTIVE_PATHS, out nPath, out nMode) != 0
+                    || nPath == 0)
+                    return new HashSet<string>();
+                var paths = new Native.DISPLAYCONFIG_PATH_INFO[nPath];
+                var modes = new Native.DISPLAYCONFIG_MODE_INFO[Math.Max(1, nMode)];
+                if (Native.QueryDisplayConfig(Native.QDC_ONLY_ACTIVE_PATHS,
+                        ref nPath, paths, ref nMode, modes, IntPtr.Zero) != 0)
+                    return new HashSet<string>();
+
+                for (int i = 0; i < nPath; i++)
+                {
+                    var req = new Native.DISPLAYCONFIG_SOURCE_DEVICE_NAME
+                    {
+                        type = Native.DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                        size = System.Runtime.InteropServices.Marshal.SizeOf(
+                            typeof(Native.DISPLAYCONFIG_SOURCE_DEVICE_NAME)),
+                        adapterId = paths[i].sourceInfo.adapterId,
+                        id = paths[i].sourceInfo.id
+                    };
+                    if (Native.DisplayConfigGetDeviceInfo(ref req) != 0) continue;
+                    string gdi = req.viewGdiDeviceName;
+                    if (string.IsNullOrEmpty(gdi)) continue;
+                    int tech = paths[i].targetInfo.outputTechnology;
+                    bool isInternal = tech == 6 || tech == 11 || tech == 13
+                        || tech == unchecked((int)0x80000000);
+                    bool prev;
+                    byDevice[gdi] = byDevice.TryGetValue(gdi, out prev)
+                        ? (prev && isInternal) : isInternal;
+                }
+            }
+            catch { }
+            var result = new HashSet<string>();
+            foreach (var kv in byDevice) if (kv.Value) result.Add(kv.Key);
+            return result;
         }
 
         static string GdiDeviceName(IntPtr hMon)
@@ -225,7 +286,11 @@ namespace MonitorSwitch
             return n;
         }
 
-        public static ApplyOutcome ApplyProfile(Profile p)
+        // Applies the profile. With onlyMonitorId set, the plan is still built
+        // against ALL connected monitors (so id/alias/pairing resolution is
+        // identical to a full switch) but only that one monitor is written;
+        // the others are out of scope and are NOT counted as unmatched.
+        public static ApplyOutcome ApplyProfile(Profile p, string onlyMonitorId = null)
         {
             var outcome = new ApplyOutcome();
             var monitors = GetMonitors();
@@ -234,8 +299,14 @@ namespace MonitorSwitch
                 if (monitors.Count == 0) { outcome.NoMonitors = true; return outcome; }
 
                 MonitorMatch[] plan = Plan(p, monitors);
+                bool sawScoped = false;
                 for (int i = 0; i < monitors.Count; i++)
                 {
+                    if (onlyMonitorId != null)
+                    {
+                        if (monitors[i].Id != onlyMonitorId) continue;
+                        sawScoped = true;
+                    }
                     if (!plan[i].Has) { outcome.Unmatched++; continue; }
                     if (plan[i].Kind == MatchKind.Paired) outcome.Paired++;
                     if (Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, plan[i].Value))
@@ -243,10 +314,29 @@ namespace MonitorSwitch
                     else
                         outcome.Failures++;
                 }
+                // The scoped monitor being absent (typically: it is showing the
+                // other computer and dropped off this PC's display list) is
+                // "nothing switched", not success.
+                if (onlyMonitorId != null && !sawScoped) outcome.Unmatched++;
                 outcome.Learned = LearnAliases(p, monitors, plan);
             }
             finally { Release(monitors); }
             return outcome;
+        }
+
+        // Whether ONE monitor (by id) is present, readable, and already showing
+        // what this profile would set it to. Plans against the full live list
+        // so scoped and full switching agree on which entry drives the monitor.
+        public static bool MonitorOnProfile(Profile p, List<MonitorInput> live, string monitorId)
+        {
+            if (p == null || p.Inputs == null || live == null || monitorId == null) return false;
+            var mons = new List<PhysMon>();
+            foreach (var m in live) mons.Add(new PhysMon { Id = m.Id ?? "", Description = "" });
+            MonitorMatch[] plan = Plan(p, mons);
+            for (int i = 0; i < live.Count; i++)
+                if (live[i].Id == monitorId)
+                    return plan[i].Has && live[i].Value >= 0 && (uint)live[i].Value == plan[i].Value;
+            return false;
         }
 
         // ----- per-monitor input support & single-monitor switching -----------
