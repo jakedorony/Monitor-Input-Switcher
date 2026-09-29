@@ -8,7 +8,7 @@ Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 2.6.1 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+- Version 2.7.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
   (`MyAppVersion`). v2.0 = the .NET 8 port + per-machine sync; v2.1 = shared
   profiles matched by monitor hardware id; v2.2 = publishing prep (real
   icon, update checker, crash log, release workflow, LICENSE/README);
@@ -19,7 +19,11 @@ Inno Setup per-user installer. Built for a non-technical end user.
   v2.5.0 = in-app account deletion; v2.6.0 = dock-button integration
   (DockWatch/DockLibrary/DockWizard, Plugable TBT4-UD5 first entry);
   v2.6.1 = GUI polish (content-sized windows, transparent-backed owner-drawn
-  controls to kill white edge fringes, themed text fields).
+  controls to kill white edge fringes, themed text fields); v2.7.0 = scoped
+  dock switching (per-direction one-monitor functions + sticky tray
+  toggle), built-in laptop panels ignored, in-GUI patch notes
+  (CHANGELOG-driven), InputPicker disposed-menu crash fix, sign-out
+  session revocation.
   The single-file C#5 original lives in git history; the user runs an installed copy at
   `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (v2.0.0 as of 2026-07-27;
   installers upgrade it in place via the shared AppId).

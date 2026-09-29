@@ -5,7 +5,7 @@ workflow publishes the matching version's section as the GitHub release
 body, and the app shows it in its "What's new" window after an upgrade
 (Settings -> Help -> What's new... shows it any time).
 
-## 2.7.0 - 2026-09-25
+## 2.7.0 - 2026-09-29
 
 - **The dock button can move just one screen.** Each dock direction now
   offers "All monitors" or a single monitor of your choosing - so one
