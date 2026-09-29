@@ -272,9 +272,20 @@ models across PCs remains an accepted ambiguity.
   allows it) — capture/switch mismatches on exotic hardware are known.
 - Some monitors power their link (and DDC) fully down on inactive inputs:
   the user's Dell U2412M is unreachable from a PC it isn't showing, while
-  the ASUS PG27AQDM stays commandable. This bounds the dock feature's
-  return direction on a single machine — the arrival retry loop
+  the ASUS PG27AQDM stays commandable. Probe-verified 2026-09-29: with the
+  U2412M sitting on a dead input for 10.5 minutes, it stayed ENUMERATED on
+  the idle PC's link, every read failed, and all 54 `SetVCPFeature` calls
+  returned TRUE while doing nothing — never trust a write ACK on this
+  hardware, verify by read-back (the retry loop already does). This bounds
+  the dock feature's return direction — the arrival retry loop
   (`TrayApp.DockRetryTick`, ~85s, success = every PROFILE entry home, not
-  every visible monitor) ends with an honest warning balloon. The complete
-  fix is the app on both machines: each machine's dock-DEPARTED direction
-  is always reliable because its links are still live at that moment.
+  every visible monitor) ends with an honest warning balloon.
+  "App on both machines" completes the round trip ONLY when each machine
+  has direct video to the monitors. A laptop whose video runs THROUGH the
+  dock (the user's work laptop: work profile = dock HDMI/DVI outputs)
+  loses its video path at the button press, ~6.5s before the debounced
+  departed action fires — its departed direction can never run. The
+  monitor's own input auto-select doesn't save it either: the dock keeps
+  its outputs trained, so the dead input never looks dead. Documented
+  flow for that direction (SETUP.md): tray-switch profiles from the
+  laptop FIRST (links still live), then press the button.

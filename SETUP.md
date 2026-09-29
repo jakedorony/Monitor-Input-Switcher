@@ -119,13 +119,21 @@ Each direction can move **all monitors or just one**: pick an entry like
 *"Only ASUS → Work"* to send one screen to the other computer while the
 rest stay put — handy when you like keeping one screen on each machine.
 
-For the smoothest experience install the app on **both** computers: some
-monitors (older Dells, for example) can't be reached by a computer they
-aren't currently showing, so each computer handles the "dock is leaving me"
-half of the switch — which always works — and the whole round trip becomes
-reliable. With the app on only one machine, the switch away is perfect and
-the switch back may need a monitor or two pressed by hand (the app tells
-you when that happens).
+Some monitors (older Dells, for example) can't be reached by a computer
+they aren't currently showing — commands to them just vanish. How to get a
+reliable round trip depends on how your computers are wired:
+
+- **Each computer has its own video cables to the monitors:** install the
+  app on both. Each computer handles the "dock is leaving me" half of the
+  switch while its links are still live, and both directions just work.
+- **One computer's video runs *through* the dock** (typical for a laptop
+  with a single cable): that computer loses its video path the instant the
+  button is pressed, so it can't switch stubborn monitors on the way out.
+  For that direction, switch first, then press: right-click the tray icon
+  on that computer, click the profile you're heading to (the monitors
+  move while it still controls them), then press the dock button to send
+  the keyboard and mouse across. The other direction stays a single
+  button press.
 
 ---
 
