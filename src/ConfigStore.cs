@@ -40,6 +40,13 @@ namespace MonitorSwitch
             public ProfileDto ProfileB { get; set; }
             public string Theme { get; set; }            // "System" | "Light" | "Dark"; device-local
             public DockDto Dock { get; set; }            // device-local, never synced
+            // Skip built-in laptop panels entirely (see Ddc.GetMonitors).
+            // Nullable so configs written before the option existed keep the
+            // default (true). Device-local, never synced.
+            public bool? IgnoreInternal { get; set; }
+            // Version that last ran on this device; a change means an upgrade
+            // happened and the "What's new" notes are shown once.
+            public string LastRunVersion { get; set; }
         }
 
         public class DockDto
@@ -48,6 +55,10 @@ namespace MonitorSwitch
             public List<string> Signatures { get; set; }     // "VVVV:PPPP" hub ids
             public string OnDeparted { get; set; }           // "A" | "B" | null (off)
             public string OnArrived { get; set; }
+            // Optional per-direction scope: switch only this monitor (PnP id)
+            // instead of every monitor. null = all monitors.
+            public string OnDepartedMonitor { get; set; }
+            public string OnArrivedMonitor { get; set; }
         }
 
         // The dock trigger is about THIS machine's cabling; never synced.
@@ -70,11 +81,15 @@ namespace MonitorSwitch
             d.Signatures = clean;
             if (d.OnDeparted != "A" && d.OnDeparted != "B") d.OnDeparted = null;
             if (d.OnArrived != "A" && d.OnArrived != "B") d.OnArrived = null;
+            d.OnDepartedMonitor = Limits.Id(d.OnDepartedMonitor);
+            d.OnArrivedMonitor = Limits.Id(d.OnArrivedMonitor);
             if (d.Signatures.Count == 0) d.Enabled = false;
         }
 
         // Device-local settings that ride in config.json next to the profiles.
         public static string Theme = "System";
+        public static bool IgnoreInternal = true;
+        public static string LastRunVersion;         // null = pre-2.7 config or first run
 
         public static string Dir
         {
@@ -105,6 +120,12 @@ namespace MonitorSwitch
                     if (dto != null)
                     {
                         if (!string.IsNullOrEmpty(dto.Theme)) Theme = dto.Theme;
+                        if (dto.IgnoreInternal.HasValue) IgnoreInternal = dto.IgnoreInternal.Value;
+                        // Version strings only - anything else stays null.
+                        Version parsed;
+                        if (dto.LastRunVersion != null && dto.LastRunVersion.Length <= 20
+                            && Version.TryParse(dto.LastRunVersion, out parsed))
+                            LastRunVersion = dto.LastRunVersion;
                         if (dto.Dock != null) Dock = dto.Dock;
                         SanitizeDock(Dock);
                         var a = FromDto(dto.ProfileA);
@@ -140,7 +161,9 @@ namespace MonitorSwitch
                     ProfileA = ToDto(profileA),
                     ProfileB = ToDto(profileB),
                     Theme = Theme,
-                    Dock = Dock
+                    Dock = Dock,
+                    IgnoreInternal = IgnoreInternal,
+                    LastRunVersion = LastRunVersion
                 };
                 var opts = new JsonSerializerOptions
                 {

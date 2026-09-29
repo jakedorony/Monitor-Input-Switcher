@@ -310,7 +310,10 @@ namespace MonitorSwitch
                 var card = NewCard();
                 card.Controls.Add(new Label
                 {
-                    Text = "No monitors responding. Check that DDC/CI is enabled in the monitor's menu.",
+                    Text = Ddc.LastIgnoredInternal > 0
+                        ? "Only this computer's built-in screen is connected right now. " +
+                          "External monitors appear here when they're plugged in."
+                        : "No monitors responding. Check that DDC/CI is enabled in the monitor's menu.",
                     Font = Theme.Body, ForeColor = P.Muted, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
                 });
                 stack.Controls.Add(card, 0, 0);
@@ -554,7 +557,13 @@ namespace MonitorSwitch
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
             };
             startLbl.Cursor = Cursors.Hand;
-            startLbl.Click += delegate { toggle.On = !toggle.On; };
+            // Setting On doesn't raise Toggled, so apply the change explicitly.
+            startLbl.Click += delegate
+            {
+                toggle.On = !toggle.On;
+                if (!TrayApp.SetStartupEnabled(toggle.On))
+                    toggle.On = TrayApp.GetStartupEnabled();
+            };
 
             var account = Link(SyncClient.IsSignedIn ? SyncClient.Email : "Sign in to sync",
                 delegate { SettingsWindow.ShowWindow(); });

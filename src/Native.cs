@@ -170,6 +170,67 @@ namespace MonitorSwitch
         [DllImport("user32.dll")]
         public static extern bool UnregisterDeviceNotification(IntPtr handle);
 
+        // ----- internal (built-in laptop) panel detection ---------------------
+        // QueryDisplayConfig reports each active path's output technology;
+        // embedded values (LVDS, eDP, eUDI, INTERNAL) identify the lid panel.
+
+        public const uint QDC_ONLY_ACTIVE_PATHS = 2;
+        public const int DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct LUID { public uint LowPart; public int HighPart; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_PATH_SOURCE_INFO
+        {
+            public LUID adapterId; public uint id; public uint modeInfoIdx; public uint statusFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_PATH_TARGET_INFO
+        {
+            public LUID adapterId; public uint id; public uint modeInfoIdx;
+            public int outputTechnology; public int rotation; public int scaling;
+            public uint refreshNumerator; public uint refreshDenominator;
+            public int scanLineOrdering; public int targetAvailable; public uint statusFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_PATH_INFO
+        {
+            public DISPLAYCONFIG_PATH_SOURCE_INFO sourceInfo;
+            public DISPLAYCONFIG_PATH_TARGET_INFO targetInfo;
+            public uint flags;
+        }
+
+        // 64-byte blob: the mode details are never read, only the array is
+        // required by the QueryDisplayConfig signature.
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_MODE_INFO { public ulong a, b, c, d, e, f, g, h; }
+
+        // DISPLAYCONFIG_DEVICE_INFO_HEADER (type/size/adapterId/id) followed
+        // by the source's GDI name (e.g. \\.\DISPLAY1).
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DISPLAYCONFIG_SOURCE_DEVICE_NAME
+        {
+            public int type; public int size; public LUID adapterId; public uint id;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string viewGdiDeviceName;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern int GetDisplayConfigBufferSizes(
+            uint flags, out uint numPaths, out uint numModes);
+
+        [DllImport("user32.dll")]
+        public static extern int QueryDisplayConfig(
+            uint flags, ref uint numPaths, [Out] DISPLAYCONFIG_PATH_INFO[] paths,
+            ref uint numModes, [Out] DISPLAYCONFIG_MODE_INFO[] modes, IntPtr currentTopologyId);
+
+        [DllImport("user32.dll")]
+        public static extern int DisplayConfigGetDeviceInfo(
+            ref DISPLAYCONFIG_SOURCE_DEVICE_NAME request);
+
         // ----- Dark title bar (dwmapi is not a KnownDLL - keep the attribute) -----
 
         public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;

@@ -494,6 +494,7 @@ namespace MonitorSwitch
                 ShowImageMargin = false, ShowCheckMargin = false, Font = Theme.Body,
                 BackColor = MenuBack, ForeColor = TextColor
             };
+            int picked = -1;
             for (int i = 0; i < items.Count; i++)
             {
                 int idx = i;
@@ -503,17 +504,32 @@ namespace MonitorSwitch
                     Font = i == selected ? Theme.Strong : Theme.Body,
                     BackColor = MenuBack
                 };
-                mi.Click += delegate
-                {
-                    if (idx == selected) return;
-                    selected = idx;
-                    Invalidate();
-                    var h = ValueChanged;
-                    if (h != null) h(this, EventArgs.Empty);
-                };
+                mi.Click += delegate { picked = idx; };
                 menu.Items.Add(mi);
             }
-            menu.Closed += delegate { menu.Dispose(); };
+            // Commit the selection AND dispose the menu only after the close
+            // has fully unwound, via a posted message. Two crashes hide here:
+            // (1) WinForms' modal menu filter still references the menu while
+            //     Closed runs - disposing it synchronously made the NEXT mouse
+            //     click anywhere die with ObjectDisposedException;
+            // (2) ValueChanged handlers rebuild whole windows (dispose THIS
+            //     picker), which must not happen while the menu is tearing down.
+            menu.Closed += delegate
+            {
+                var ctx = System.Threading.SynchronizationContext.Current;
+                if (ctx == null) { menu.Dispose(); return; }
+                ctx.Post(delegate
+                {
+                    if (picked >= 0 && picked != selected && !IsDisposed)
+                    {
+                        selected = picked;
+                        Invalidate();
+                        var h = ValueChanged;
+                        if (h != null) h(this, EventArgs.Empty);
+                    }
+                    menu.Dispose();
+                }, null);
+            };
             menu.Show(this, new Point(0, Height));
         }
 
