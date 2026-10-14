@@ -309,6 +309,19 @@ namespace MonitorSwitch
                     }
                     if (!plan[i].Has) { outcome.Unmatched++; continue; }
                     if (plan[i].Kind == MatchKind.Paired) outcome.Paired++;
+                    // Already showing the planned input? Then it IS applied -
+                    // skip the write so re-applies (dock retries, idempotent
+                    // double-acts, re-clicks) don't make the monitor flash
+                    // its OSD over and over. Unreadable monitors still get
+                    // the write: absence of proof is not proof of absence.
+                    uint cur = 0, max = 0;
+                    if (Native.GetVCPFeatureAndVCPFeatureReply(
+                            monitors[i].Handle, VCP_INPUT, IntPtr.Zero, ref cur, ref max)
+                        && (cur & 0xFF) == plan[i].Value)
+                    {
+                        outcome.Applied++;
+                        continue;
+                    }
                     if (Native.SetVCPFeature(monitors[i].Handle, VCP_INPUT, plan[i].Value))
                         outcome.Applied++;
                     else

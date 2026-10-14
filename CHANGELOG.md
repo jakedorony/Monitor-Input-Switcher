@@ -5,6 +5,22 @@ workflow publishes the matching version's section as the GitHub release
 body, and the app shows it in its "What's new" window after an upgrade
 (Settings -> Help -> What's new... shows it any time).
 
+## 2.8.0 - 2026-10-14
+
+- **Switch one monitor from the window.** Each monitor row now has a
+  small Personal/Work switch that sends just that screen to a profile,
+  and highlights the profile each screen is currently showing - so a
+  split setup (one screen on each computer) is visible at a glance.
+- **Your clicks outrank the dock button.** Switching anything by hand
+  (the big switch, a monitor's mini switch, an input dropdown, the tray
+  menu) now stops any dock follow-up still in progress, so the app never
+  pulls a monitor back seconds after you deliberately moved it.
+- **Fixed a monitor being re-switched over and over** after a dock press
+  when a profile had accumulated a duplicate entry for the same screen
+  under two names. Duplicates now merge automatically, and switching
+  leaves monitors alone when they're already showing the right input -
+  no more input menu flashing on repeats.
+
 ## 2.7.0 - 2026-09-29
 
 - **The dock button can move just one screen.** Each dock direction now

@@ -111,6 +111,29 @@ namespace MonitorSwitch
                     }
                     e.Aliases = al.Count > 0 ? al : null;
                 }
+                // Two entries naming the SAME physical panel (one's id is the
+                // other's alias) poison "every entry home" checks: the dock
+                // retry can never succeed and re-switches a correct monitor
+                // forever. Merge into the first entry instead of keeping both.
+                InputSetting dup = null;
+                if (e.MonitorId != null)
+                    foreach (var k in kept)
+                        if (k.MonitorId != null && (k.Matches(e.MonitorId) || e.Matches(k.MonitorId)))
+                        { dup = k; break; }
+                if (dup != null)
+                {
+                    // Merge stays inside the alias cap: a hostile row full of
+                    // duplicates must not inflate one entry past Limits.Aliases.
+                    if (dup.Aliases == null || dup.Aliases.Count < Aliases)
+                        dup.AddAlias(e.MonitorId);
+                    if (e.Aliases != null)
+                        foreach (var a in e.Aliases)
+                        {
+                            if (dup.Aliases != null && dup.Aliases.Count >= Aliases) break;
+                            dup.AddAlias(a);
+                        }
+                    continue;
+                }
                 kept.Add(e);
                 if (kept.Count >= Entries) break;
             }

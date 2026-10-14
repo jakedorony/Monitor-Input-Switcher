@@ -8,7 +8,7 @@ Inno Setup per-user installer. Built for a non-technical end user.
 
 ## Current status
 
-- Version 2.7.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
+- Version 2.8.0 in both `MonitorSwitch.csproj` and `MonitorSwitch.iss`
   (`MyAppVersion`). v2.0 = the .NET 8 port + per-machine sync; v2.1 = shared
   profiles matched by monitor hardware id; v2.2 = publishing prep (real
   icon, update checker, crash log, release workflow, LICENSE/README);
@@ -23,7 +23,10 @@ Inno Setup per-user installer. Built for a non-technical end user.
   dock switching (per-direction one-monitor functions + sticky tray
   toggle), built-in laptop panels ignored, in-GUI patch notes
   (CHANGELOG-driven), InputPicker disposed-menu crash fix, sign-out
-  session revocation.
+  session revocation; v2.8.0 = per-tile `MiniSwitch` (scoped switching in
+  the GUI), duplicate-entry merge + skip-write-when-on-target (fixes the
+  dock-arrival re-switch storm), user actions cancel dock retries,
+  bounded GitHub response bodies.
   The single-file C#5 original lives in git history; the user runs an installed copy at
   `%LOCALAPPDATA%\Programs\Monitor Input Switcher` (v2.0.0 as of 2026-07-27;
   installers upgrade it in place via the shared AppId).
@@ -149,7 +152,9 @@ submitting to microsoft/winget-pkgs.
   positional→id upgrade on launch.
 - `MainWindow.cs` — modeless singleton themed window (`MainForm`): header
   (sync pill, theme pill, gear), the `SegmentedSwitch` hero, one tile per
-  connected monitor with a live `InputPicker` (switches that monitor now),
+  connected monitor with a `MiniSwitch` (sends JUST that monitor to A/B
+  via the scoped `TrayApp.Apply`; active segment = `Ddc.MonitorOnProfile`)
+  and a live `InputPicker` (switches that monitor to any input now),
   two profile cards with per-monitor pickers (`TrayApp.UpdateProfileInput`),
   footer (startup toggle, account, Advanced). Rebuilt wholesale on
   `ProfilesChanged`/`SyncStateChanged`/`Theme.Changed` and on activation;
@@ -157,7 +162,8 @@ submitting to microsoft/winget-pkgs.
 - `SettingsWindow.cs` — account/sync sign-in, appearance (System/Light/Dark),
   startup, monitor matching (Clear learned matches), help/version.
 - `Controls.cs` — owner-drawn `Card`, `FlatButton`, `LinkAction`,
-  `SegmentedSwitch`, `ToggleSwitch`, `ThemePill`, `GlyphButton`,
+  `SegmentedSwitch`, `MiniSwitch` (per-tile two-segment profile switch),
+  `ToggleSwitch`, `ThemePill`, `GlyphButton`,
   `StatusPill`, `InputPicker` (themed dropdown; ComboBox ignores dark
   BackColors). Glyphs come from Segoe MDL2 Assets (`Theme.Glyph*`).
 - `Theme.cs` — `Palette.Light/Dark`, `Theme.Mode` (System follows the
@@ -196,6 +202,9 @@ submitting to microsoft/winget-pkgs.
   each computer. Departure actions are always safe (our DDC link is still
   live); arrival actions are skipped when the scoped monitor (or all of
   them) is already on target (idempotent if both machines run the app).
+  Every user-initiated switch (`TrayApp.Apply`/`SetMonitorInput`) cancels
+  a pending dock-arrival retry — explicit action beats automation; the
+  dock path re-arms its retry after Apply, so it never cancels itself.
   `Dock.Enabled` is also a sticky tray-menu toggle ("Dock button switches
   monitors", hidden until a dock is configured; state refreshed on menu
   Opening) so the button can move just the keyboard/mouse while monitors
@@ -235,6 +244,17 @@ profile change. Because an alias is an inference, the main window's "Monitor
 matching" group has "Clear learned matches" (`TrayApp.ForgetLearnedMatches`),
 which wipes them, bumps `UpdatedAtUtc`, and pushes so other PCs don't restore
 them. Keep that escape hatch; it is the only way to undo a wrong deduction.
+
+**Duplicate entries merge at ingest.** `TrayApp.UpdateProfileInput` appends
+a new entry when nothing Matches the edited monitor id — on a machine where
+the panel reports a different id than the (un-aliased) stored entry, that
+once created the SAME panel twice (`DELA07A` + `DELA07B`, seen live
+2026-10-14). Two entries for one panel poison every "all profile entries
+home" check: the dock-arrival retry can never succeed and re-switches an
+already-correct monitor forever. `Limits.Apply` therefore merges any entry
+whose id is another entry's alias (either direction), and
+`Ddc.ApplyProfile` skips the write when a monitor already reads the planned
+value (re-applies stay invisible; unreadable monitors still get written).
 
 Connected monitors that end up with no entry at all are counted in
 `ApplyOutcome.Unmatched` and surfaced as a warning balloon. Never go back to

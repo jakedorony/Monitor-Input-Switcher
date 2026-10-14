@@ -280,6 +280,12 @@ namespace MonitorSwitch
         // arrangement); the other monitors are deliberately left alone.
         public static void Apply(Profile p, string onlyMonitorId = null)
         {
+            // An explicit switch supersedes any dock-arrival retry still
+            // ticking: without this, the timer could yank a monitor back
+            // seconds after the user deliberately sent it elsewhere. The dock
+            // path itself re-arms the retry AFTER calling Apply, so this
+            // never cancels the retry it is part of.
+            CancelDockRetry();
             if (!IsSet(p))
             {
                 Tray.ShowBalloonTip(3000, "Monitor Switch",
@@ -598,6 +604,7 @@ namespace MonitorSwitch
         // Switches one connected monitor right now (the tile's "Change").
         public static bool SetMonitorInput(string monitorId, uint value)
         {
+            CancelDockRetry();          // explicit user action beats automation
             bool ok = Ddc.SetInput(monitorId, value);
             if (!ok)
                 Tray.ShowBalloonTip(3000, "Monitor Switch",

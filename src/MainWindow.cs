@@ -323,12 +323,12 @@ namespace MonitorSwitch
             for (int i = 0; i < live.Count; i++)
             {
                 stack.RowStyles.Add(new RowStyle(SizeType.Absolute, L(62)));
-                stack.Controls.Add(BuildTile(live[i]), 0, i);
+                stack.Controls.Add(BuildTile(live[i], live), 0, i);
             }
             return stack;
         }
 
-        Control BuildTile(MonitorInput m)
+        Control BuildTile(MonitorInput m, List<MonitorInput> live)
         {
             var card = NewCard();
             card.Margin = new Padding(0, 0, 0, L(8));
@@ -336,11 +336,12 @@ namespace MonitorSwitch
 
             var row = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Color.Transparent, Margin = Padding.Empty
+                Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, BackColor = Color.Transparent, Margin = Padding.Empty
             };
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, L(34)));
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, L(150)));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, L(112)));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, L(134)));
             row.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             var glyph = new Label
@@ -363,12 +364,39 @@ namespace MonitorSwitch
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft, Margin = Padding.Empty, AutoEllipsis = true
             }, 0, 1);
 
+            string id = m.Id;
+
+            // Per-monitor profile shortcut: send JUST this monitor to A or B
+            // (the dock's scoped apply, exposed in the GUI). Active segment =
+            // the profile this monitor is showing right now.
+            Profile pa = TrayApp.ProfileA, pb = TrayApp.ProfileB;
+            bool onA = Ddc.MonitorOnProfile(pa, live, id);
+            bool onB = Ddc.MonitorOnProfile(pb, live, id);
+            var mini = new MiniSwitch
+            {
+                LeftText = pa.Name, RightText = pb.Name,
+                LeftEnabled = TrayApp.IsSet(pa), RightEnabled = TrayApp.IsSet(pb),
+                Active = onA ? 0 : (onB ? 1 : -1),
+                Track = P.Track, Accent = P.Accent, AccentText = P.AccentText,
+                Muted = P.Muted, TextColor = P.Text,
+                Size = new Size(L(106), L(24)), Anchor = AnchorStyles.Right,
+                Margin = new Padding(0, 0, L(6), 0)
+            };
+            mini.SegmentClicked += delegate(int seg)
+            {
+                if (building) return;
+                TrayApp.Apply(seg == 0 ? TrayApp.ProfileA : TrayApp.ProfileB, id);
+                Refresh();
+                settleTimer.Stop(); settleTimer.Start();
+            };
+            new ToolTip().SetToolTip(mini,
+                "Send only this monitor to " + pa.Name + " / " + pb.Name);
+
             var picker = NewPicker();
             picker.Anchor = AnchorStyles.Right;
-            picker.Width = L(146);
+            picker.Width = L(130);
             uint[] choices = Ddc.CachedInputs(m.Id) ?? Ddc.FallbackInputs;
             picker.SetItems(choices, m.Value < 0 ? 0 : (uint)m.Value);
-            string id = m.Id;
             picker.ValueChanged += delegate
             {
                 if (building) return;
@@ -377,11 +405,12 @@ namespace MonitorSwitch
                 TrayApp.SetMonitorInput(id, v);
                 settleTimer.Stop(); settleTimer.Start();
             };
-            new ToolTip().SetToolTip(picker, "Switch this monitor right now");
+            new ToolTip().SetToolTip(picker, "Switch this monitor to any input");
 
             row.Controls.Add(glyph, 0, 0);
             row.Controls.Add(text, 1, 0);
-            row.Controls.Add(picker, 2, 0);
+            row.Controls.Add(mini, 2, 0);
+            row.Controls.Add(picker, 3, 0);
             card.Controls.Add(row);
             return card;
         }

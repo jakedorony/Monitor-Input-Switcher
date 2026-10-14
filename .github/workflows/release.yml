@@ -34,8 +34,8 @@ jobs:
             if ($start -lt 0 -and $lines[$i] -match ('^## ' + [regex]::Escape($ver) + '\b')) { $start = $i + 1 }
             elseif ($start -ge 0 -and $lines[$i] -match '^## ') { $end = $i; break }
           }
-          if ($start -lt 0) {
-            Write-Host "No CHANGELOG.md section for $ver - the release will use generated notes."
+          if ($start -lt 0 -or $start -ge $end) {
+            Write-Host "No usable CHANGELOG.md section for $ver - the release will use generated notes."
             Set-Content notes.md "" -Encoding utf8
           } else {
             $lines[$start..($end - 1)] | Set-Content notes.md -Encoding utf8

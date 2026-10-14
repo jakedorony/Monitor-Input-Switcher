@@ -47,6 +47,8 @@ namespace MonitorSwitch
                 using (var http = new HttpClient())
                 {
                     http.Timeout = TimeSpan.FromSeconds(15);
+                    // Remote content: bound the body before it ever reaches memory.
+                    http.MaxResponseContentBufferSize = 1024 * 1024;
                     // GitHub's API requires a User-Agent.
                     http.DefaultRequestHeaders.Add("User-Agent", "MonitorSwitch-UpdateCheck");
                     string json = await http.GetStringAsync(LatestApi);

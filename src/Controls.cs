@@ -156,6 +156,81 @@ namespace MonitorSwitch
         }
     }
 
+    // The hero's little sibling: a tile-sized two-segment switch that sends
+    // ONE monitor to a profile. Active = the profile that monitor is
+    // currently showing (by the same matching a switch would use).
+    class MiniSwitch : Control
+    {
+        public string LeftText = "A", RightText = "B";
+        public bool LeftEnabled = true, RightEnabled = true;
+        public int Active = -1;                 // 0 left, 1 right, -1 neither
+        public Color Track, Accent, AccentText, Muted, TextColor;
+        public event Action<int> SegmentClicked;
+        int hoverSeg = -1;
+
+        public MiniSwitch()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                     ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;      // see FlatButton: avoids edge fringes
+            Cursor = Cursors.Hand;
+        }
+
+        int SegAt(int x) { return x < Width / 2 ? 0 : 1; }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            int s = SegAt(e.X);
+            if (s != hoverSeg) { hoverSeg = s; Invalidate(); }
+            base.OnMouseMove(e);
+        }
+        protected override void OnMouseLeave(EventArgs e) { hoverSeg = -1; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            int s = SegAt(e.X);
+            if ((s == 0 && !LeftEnabled) || (s == 1 && !RightEnabled)) return;
+            var h = SegmentClicked;
+            if (h != null) h(s);
+            base.OnMouseClick(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Draw.Setup(e.Graphics);
+            float s = Draw.Scale(this);
+            float pad = 2 * s, gap = 2 * s;
+            using (var path = Draw.RoundRect(new RectangleF(0, 0, Width, Height), Height / 2f))
+            using (var b = new SolidBrush(Track))
+                e.Graphics.FillPath(b, path);
+
+            float segW = (Width - pad * 2 - gap) / 2f;
+            for (int i = 0; i < 2; i++)
+            {
+                var r = new RectangleF(pad + i * (segW + gap), pad, segW, Height - pad * 2);
+                bool active = Active == i;
+                bool enabled = i == 0 ? LeftEnabled : RightEnabled;
+                if (active)
+                {
+                    using (var path = Draw.RoundRect(r, r.Height / 2f))
+                    using (var b = new SolidBrush(Accent))
+                        e.Graphics.FillPath(b, path);
+                }
+                else if (hoverSeg == i && enabled)
+                {
+                    using (var path = Draw.RoundRect(r, r.Height / 2f))
+                    using (var b = new SolidBrush(Color.FromArgb(28, TextColor)))
+                        e.Graphics.FillPath(b, path);
+                }
+                Color tc = active ? AccentText : (enabled ? Muted : Color.FromArgb(110, Muted));
+                TextRenderer.DrawText(e.Graphics, i == 0 ? LeftText : RightText, Theme.Small,
+                    Rectangle.Round(r), tc,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            }
+        }
+    }
+
     // The hero: two segments, the active one filled with the accent color.
     class SegmentedSwitch : Control
     {
